@@ -211,6 +211,27 @@ h1 { font-weight: 560; font-size: clamp(28px, 3vw, 44px); letter-spacing: -0.03e
   text-align: center;
 }
 .creature-label strong { display: block; font-size: 28px; font-weight: 560; }
+.plinth-card.in-world,
+.creature-label.in-world,
+.readout.in-world {
+  position: relative;
+  inset: auto;
+  left: auto;
+  top: auto;
+  bottom: auto;
+  transform: none;
+  z-index: auto;
+  pointer-events: none;
+}
+.plinth-card.in-world {
+  width: 300px;
+  max-height: 210px;
+}
+.readout.in-world {
+  width: 280px;
+  max-width: 280px;
+}
+.creature-label.in-world strong { font-size: 22px; }
 .creature-label span { color: var(--muted); }
 .vend-status {
   left: 50%;

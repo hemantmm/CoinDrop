@@ -71,24 +71,34 @@ export function PlinthCard({
   product,
   hidden,
   listening,
+  placed = false,
 }: {
   product: Product | null;
   hidden: boolean;
   listening: boolean;
+  placed?: boolean;
 }) {
   if (!product || hidden) return null;
   if (product.type === "creature" || product.type === "reality") return null;
   return (
-    <div className="plinth-card">
+    <div className={placed ? "plinth-card in-world" : "plinth-card"}>
       <PlinthBody product={product} listening={listening} />
     </div>
   );
 }
 
-export function CreatureLabel({ product, hidden }: { product: Product | null; hidden: boolean }) {
+export function CreatureLabel({
+  product,
+  hidden,
+  placed = false,
+}: {
+  product: Product | null;
+  hidden: boolean;
+  placed?: boolean;
+}) {
   if (!product || hidden || product.type !== "creature") return null;
   return (
-    <div className="creature-label">
+    <div className={placed ? "creature-label in-world" : "creature-label"}>
       <span>{product.serial}</span>
       <strong>{product.title}</strong>
     </div>

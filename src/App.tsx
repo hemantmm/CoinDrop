@@ -7,9 +7,10 @@ import { generate, isHighRarity, type Product } from "./generate";
 import { displayLine, noteVisit } from "./machine/personality";
 import { isSeed, makeSeed } from "./rng";
 import { Gallery, Machine, type Phase } from "./scene/Machine";
+import { WorldCopy } from "./scene/Labels";
 import { Reality } from "./scene/Reality";
 import { Cabinet } from "./ui/Cabinet";
-import { CreatureLabel, Moment, PlinthCard, RealityOverlay, Receipt } from "./ui/Receipt";
+import { Moment, RealityOverlay, Receipt } from "./ui/Receipt";
 
 const VEND_MS = 2200;
 const REALITY_MS = 5000;
@@ -214,6 +215,8 @@ export function App() {
   const readout = displayLine({
     phase,
     rarity: product?.rarity ?? null,
+    type: product?.type ?? null,
+    title: product?.title ?? null,
     seed: product?.seed ?? null,
     visits,
     discoveries: cabinet.length,
@@ -236,15 +239,16 @@ export function App() {
         </header>
         <div className="stage">
           <Canvas
+            shadows
             dpr={[1, 1.75]}
-            camera={{ position: [0.22, 1.12, 4.35], fov: 32 }}
+            camera={{ position: [2.25, 1.42, 3.2], fov: 38 }}
             gl={{
               antialias: true,
               toneMapping: THREE.ACESFilmicToneMapping,
-              toneMappingExposure: 1.15,
+              toneMappingExposure: 1.05,
             }}
             onCreated={({ camera, gl }) => {
-              camera.lookAt(0, 0.92, 0);
+              camera.lookAt(0, 0.95, 0);
               gl.domElement.style.touchAction = "none";
             }}
           >
@@ -257,18 +261,18 @@ export function App() {
                 canInsert={!busy}
                 onInsert={() => show(generate(makeSeed()), "vend")}
               />
+              <WorldCopy
+                phase={phase}
+                product={product}
+                showPlinth={showPlinth}
+                listening={listening}
+                readout={readout}
+              />
               {phase === "reality" && product?.payload.kind === "reality" ? (
                 <Reality spec={product.payload} startedAt={mark} />
               ) : null}
             </Gallery>
           </Canvas>
-          <PlinthCard product={product} hidden={!showPlinth} listening={listening} />
-          <CreatureLabel product={product} hidden={!showPlinth} />
-          {phase !== "reality" ? (
-            <p className="readout" data-tone={readout.tone} aria-live="polite">
-              {readout.text}
-            </p>
-          ) : null}
           {phase === "reality" && product?.payload.kind === "reality" ? (
             <RealityOverlay spec={product.payload} startedAt={mark} copied={copied} onCopy={() => void copyLink()} />
           ) : null}

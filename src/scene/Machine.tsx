@@ -1,6 +1,6 @@
 import { useMemo, useRef, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, OrbitControls, RoundedBox } from "@react-three/drei";
+import { ContactShadows, Environment, Lightformer, OrbitControls, RoundedBox } from "@react-three/drei";
 import type { Group, Mesh, MeshStandardMaterial, PointLight } from "three";
 import * as THREE from "three";
 import { RARITY_COLOR, type Product, type Rarity } from "../generate";
@@ -68,32 +68,44 @@ export function Gallery({
           maxDistance={6.8}
           minPolarAngle={0.5}
           maxPolarAngle={1.45}
-          minAzimuthAngle={-1.15}
-          maxAzimuthAngle={1.15}
+          minAzimuthAngle={-1.45}
+          maxAzimuthAngle={1.45}
         />
       ) : null}
       {phase !== "reality" ? <fog attach="fog" args={["#14110e", 7.5, 13]} /> : null}
-      <hemisphereLight args={["#f0e2cc", "#241c16", 0.55]} />
+      <hemisphereLight args={["#f3e6d0", "#1a140f", 0.35]} />
       <spotLight
-        position={[3.4, 5.4, 3.2]}
-        angle={0.45}
-        penumbra={0.8}
-        intensity={28}
-        color="#ffe1bf"
+        position={[2.6, 5.2, 3.4]}
+        angle={0.42}
+        penumbra={0.75}
+        intensity={46}
+        color="#ffe2c2"
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-bias={-0.0002}
       />
-      <pointLight position={[-2.4, 1.6, 2.2]} intensity={8} color="#9eb6d6" />
+      <spotLight position={[-3.2, 2.4, 2.2]} angle={0.6} penumbra={1} intensity={18} color="#9eb6ff" />
+      <Environment resolution={256} frames={1}>
+        <Lightformer form="rect" intensity={3.2} position={[0, 3.4, 2]} scale={[7, 3, 1]} color="#ffe7c8" />
+        <Lightformer form="rect" intensity={1.6} position={[-3.5, 1.5, 1]} scale={[2, 3, 1]} color="#b9cfff" />
+        <Lightformer form="rect" intensity={1.2} position={[3.2, 1.2, -1]} scale={[2.4, 1.6, 1]} color="#e0b15a" />
+      </Environment>
       {children}
       {phase !== "reality" ? (
         <>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0.15]}>
-            <circleGeometry args={[7, 64]} />
-            <meshStandardMaterial color="#1a1613" metalness={0.28} roughness={0.62} />
+          <RoundedBox args={[7.2, 0.22, 4.6]} position={[0, -0.11, 0.35]} radius={0.04} smoothness={2} receiveShadow>
+            <meshStandardMaterial color="#221c17" metalness={0.35} roughness={0.55} />
+          </RoundedBox>
+          <mesh position={[0, 1.7, -1.7]} receiveShadow>
+            <planeGeometry args={[12, 5.5]} />
+            <meshStandardMaterial color="#14110e" roughness={0.9} />
           </mesh>
-          <mesh position={[0, 1.8, -1.8]}>
-            <planeGeometry args={[16, 7]} />
-            <meshStandardMaterial color="#171410" />
+          <mesh position={[-3.6, 1.4, -0.2]} rotation={[0, Math.PI / 2, 0]}>
+            <planeGeometry args={[4, 4.5]} />
+            <meshStandardMaterial color="#17130f" roughness={0.95} />
           </mesh>
-          <ContactShadows position={[0, 0.001, 0.35]} opacity={0.48} scale={9} blur={2.4} far={3.2} />
+          <ContactShadows position={[0, 0.01, 0.4]} opacity={0.55} scale={8} blur={2.2} far={2.6} />
         </>
       ) : null}
     </>
@@ -132,23 +144,27 @@ function curveCoin(from: THREE.Vector3, amount: number, target: THREE.Vector3) {
     .addScaledVector(COIN_SLOT, amount * amount);
 }
 
+function Brass({ color = "#8d6a3e" }: { color?: string }) {
+  return <meshPhysicalMaterial color={color} metalness={1} roughness={0.28} clearcoat={0.45} clearcoatRoughness={0.28} />;
+}
+
 function CabinetShell() {
   return (
     <group>
-      <RoundedBox args={[1.28, 1.96, 0.08]} radius={0.02} smoothness={2} position={[0, 0, -0.28]}>
-        <meshStandardMaterial color="#8d6a3e" metalness={0.78} roughness={0.32} />
+      <RoundedBox args={[1.28, 1.96, 0.08]} radius={0.02} smoothness={2} position={[0, 0, -0.28]} castShadow>
+        <Brass />
       </RoundedBox>
-      <RoundedBox args={[0.09, 1.96, 0.64]} radius={0.02} smoothness={2} position={[-0.62, 0, 0.02]}>
-        <meshStandardMaterial color="#7d5c34" metalness={0.74} roughness={0.34} />
+      <RoundedBox args={[0.09, 1.96, 0.64]} radius={0.02} smoothness={2} position={[-0.62, 0, 0.02]} castShadow>
+        <Brass color="#7d5c34" />
       </RoundedBox>
-      <RoundedBox args={[0.09, 1.96, 0.64]} radius={0.02} smoothness={2} position={[0.62, 0, 0.02]}>
-        <meshStandardMaterial color="#7d5c34" metalness={0.74} roughness={0.34} />
+      <RoundedBox args={[0.09, 1.96, 0.64]} radius={0.02} smoothness={2} position={[0.62, 0, 0.02]} castShadow>
+        <Brass color="#7d5c34" />
       </RoundedBox>
-      <RoundedBox args={[1.36, 0.12, 0.7]} radius={0.02} smoothness={2} position={[0, 1.0, 0.02]}>
-        <meshStandardMaterial color="#9a7344" metalness={0.8} roughness={0.28} />
+      <RoundedBox args={[1.36, 0.12, 0.7]} radius={0.02} smoothness={2} position={[0, 1.0, 0.02]} castShadow>
+        <Brass color="#9a7344" />
       </RoundedBox>
-      <RoundedBox args={[1.36, 0.14, 0.7]} radius={0.02} smoothness={2} position={[0, -0.96, 0.02]}>
-        <meshStandardMaterial color="#6a4d28" metalness={0.7} roughness={0.36} />
+      <RoundedBox args={[1.36, 0.14, 0.7]} radius={0.02} smoothness={2} position={[0, -0.96, 0.02]} castShadow>
+        <Brass color="#6a4d28" />
       </RoundedBox>
       <mesh position={[0, 0.12, -0.22]}>
         <planeGeometry args={[1.16, 1.7]} />
@@ -338,7 +354,6 @@ export function Machine({
       }
       const closeness = THREE.MathUtils.clamp(1 - mesh.position.distanceTo(COIN_SLOT) / 1.5, 0, 1);
       mesh.scale.setScalar(THREE.MathUtils.lerp(1.35, 0.62, closeness));
-      if (mesh.visible) mesh.quaternion.copy(camera.quaternion);
     }
 
     const falling = progress > 0.46;
@@ -350,8 +365,8 @@ export function Machine({
       drop.current.rotation.y = vending ? progress * 5 : 0;
     }
     if (pod.current) {
-      const hideForCreature = Boolean(creature) && (phase === "revealed" || progress > 0.9);
-      pod.current.visible = !hideForCreature;
+      const hidePod = phase === "revealed" || (Boolean(creature) && progress > 0.9);
+      pod.current.visible = !hidePod;
     }
     if (creatureWrap.current) {
       creatureWrap.current.visible = Boolean(creature) && (phase === "revealed" || progress > 0.62);
@@ -364,15 +379,16 @@ export function Machine({
     <group ref={rig} visible={phase !== "reality"}>
       <group position={[0, 1.08, 0]}>
         <CabinetShell />
-        <mesh position={[0, 0.12, 0.34]}>
-          <planeGeometry args={[1.08, 1.55]} />
-          <meshStandardMaterial
-            color="#d5e7f4"
-            transparent
-            opacity={0.14}
+        <mesh position={[0, 0.12, 0.38]} castShadow>
+          <boxGeometry args={[1.05, 1.48, 0.035]} />
+          <meshPhysicalMaterial
+            color="#e7f2fb"
+            transmission={0.86}
+            thickness={0.25}
             roughness={0.04}
-            metalness={0.04}
-            depthWrite={false}
+            metalness={0}
+            ior={1.45}
+            transparent
           />
         </mesh>
         <Shelves />
@@ -391,22 +407,22 @@ export function Machine({
         <group ref={flap} position={[0, -0.92, 0.28]}>
           <mesh position={[0, -0.07, 0.08]}>
             <boxGeometry args={[0.72, 0.12, 0.08]} />
-            <meshStandardMaterial color="#6d522f" metalness={0.7} roughness={0.38} />
+            <meshPhysicalMaterial color="#6d522f" metalness={1} roughness={0.32} clearcoat={0.35} />
           </mesh>
         </group>
         <mesh position={[0, -1.02, 0.02]}>
           <boxGeometry args={[1.2, 0.08, 0.5]} />
-          <meshStandardMaterial color="#5c431f" metalness={0.55} roughness={0.4} />
+          <meshPhysicalMaterial color="#5c431f" metalness={1} roughness={0.36} clearcoat={0.3} />
         </mesh>
       </group>
 
-      <mesh position={[0, 0.12, 0.95]}>
-        <boxGeometry args={[0.78, 0.24, 0.48]} />
-        <meshStandardMaterial color="#2a241e" metalness={0.35} roughness={0.5} />
+      <mesh position={[0, 0.12, 0.95]} castShadow receiveShadow>
+        <boxGeometry args={[0.86, 0.28, 0.56]} />
+        <meshPhysicalMaterial color="#3a3128" metalness={0.55} roughness={0.38} clearcoat={0.2} />
       </mesh>
-      <mesh position={[0, 0.25, 0.95]}>
-        <boxGeometry args={[0.62, 0.02, 0.34]} />
-        <meshStandardMaterial color="#cbb892" metalness={0.6} roughness={0.28} />
+      <mesh position={[0, 0.28, 0.95]} receiveShadow>
+        <boxGeometry args={[0.7, 0.03, 0.4]} />
+        <meshPhysicalMaterial color="#e7d7b0" metalness={0.85} roughness={0.22} />
       </mesh>
 
       <group
@@ -442,14 +458,20 @@ export function Machine({
           gl.domElement.addEventListener("pointerup", release);
         }}
       >
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.11, 0.11, 0.02, 40]} />
-          <meshStandardMaterial color="#ffd98a" emissive="#e0b15a" emissiveIntensity={0.45} metalness={1} roughness={0.18} />
-        </mesh>
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.045, 0.045, 0.024, 24]} />
-          <meshStandardMaterial color="#8a5a22" metalness={0.8} roughness={0.3} />
-        </mesh>
+        <group rotation={[0.15, -0.7, 0.08]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.1, 0.1, 0.03, 48]} />
+            <meshPhysicalMaterial color="#ffd98a" emissive="#e0b15a" emissiveIntensity={0.25} metalness={1} roughness={0.18} clearcoat={0.6} />
+          </mesh>
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.1, 0.011, 12, 40]} />
+            <meshPhysicalMaterial color="#fff1c9" metalness={1} roughness={0.15} />
+          </mesh>
+          <mesh>
+            <cylinderGeometry args={[0.034, 0.034, 0.034, 24]} />
+            <meshPhysicalMaterial color="#8a5a22" metalness={1} roughness={0.3} />
+          </mesh>
+        </group>
       </group>
 
       <group ref={drop} position={[0, 0.42, 0.95]}>
