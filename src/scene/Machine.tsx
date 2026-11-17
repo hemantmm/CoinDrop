@@ -65,14 +65,14 @@ export function Gallery({
           dampingFactor={0.08}
           target={[0, 0.95, 0]}
           minDistance={2.6}
-          maxDistance={6.8}
+          maxDistance={9}
           minPolarAngle={0.5}
           maxPolarAngle={1.45}
           minAzimuthAngle={-1.45}
           maxAzimuthAngle={1.45}
         />
       ) : null}
-      {phase !== "reality" ? <fog attach="fog" args={["#14110e", 7.5, 13]} /> : null}
+      {phase !== "reality" ? <fog attach="fog" args={["#14110e", 9, 16]} /> : null}
       <hemisphereLight args={["#f3e6d0", "#1a140f", 0.35]} />
       <spotLight
         position={[2.6, 5.2, 3.4]}
@@ -94,7 +94,7 @@ export function Gallery({
       {children}
       {phase !== "reality" ? (
         <>
-          <RoundedBox args={[7.2, 0.22, 4.6]} position={[0, -0.11, 0.35]} radius={0.04} smoothness={2} receiveShadow>
+          <RoundedBox args={[10.4, 0.22, 7.2]} position={[0.2, -0.11, 0.55]} radius={0.04} smoothness={2} receiveShadow>
             <meshStandardMaterial color="#221c17" metalness={0.35} roughness={0.55} />
           </RoundedBox>
           <mesh position={[0, 1.7, -1.7]} receiveShadow>

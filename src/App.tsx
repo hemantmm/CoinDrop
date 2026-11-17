@@ -6,6 +6,7 @@ import { loadCabinet, remember, shareUrl, type CabinetItem } from "./cabinet";
 import { generate, isHighRarity, type Product } from "./generate";
 import { displayLine, noteVisit } from "./machine/personality";
 import { isSeed, makeSeed } from "./rng";
+import { Crowd } from "./scene/Crowd";
 import { Gallery, Machine, type Phase } from "./scene/Machine";
 import { WorldCopy } from "./scene/Labels";
 import { Reality } from "./scene/Reality";
@@ -60,6 +61,8 @@ export function App() {
   );
   const [copied, setCopied] = useState(false);
   const [listening, setListening] = useState(false);
+  const [askNext, setAskNext] = useState(false);
+  const [advance, setAdvance] = useState(0);
   const [canShare, setCanShare] = useState(false);
   const timers = useRef<number[]>([]);
   const copyTimer = useRef<number | null>(null);
@@ -89,6 +92,7 @@ export function App() {
     setListening(false);
     setCopied(false);
     setMoment(false);
+    setAskNext(false);
     setProduct(next);
     const url = new URL(window.location.href);
     url.searchParams.set("seed", next.seed);
@@ -101,10 +105,16 @@ export function App() {
         startPlanet(next.payload);
         setListening(true);
       }
-      if (mode === "vend" && isHighRarity(next.rarity) && next.type !== "reality" && next.type !== "creature") {
+      if (mode !== "vend") return;
+      if (isHighRarity(next.rarity) && next.type !== "reality" && next.type !== "creature") {
         setMoment(true);
-        later(MOMENT_MS, () => setMoment(false));
+        later(MOMENT_MS, () => {
+          setMoment(false);
+          setAskNext(true);
+        });
+        return;
       }
+      setAskNext(true);
     };
 
     if (mode === "vend") {
@@ -118,7 +128,10 @@ export function App() {
         if (next.type === "reality") {
           setPhase("reality");
           setMark(performance.now());
-          later(REALITY_MS, () => setPhase("revealed"));
+          later(REALITY_MS, () => {
+            setPhase("revealed");
+            setAskNext(true);
+          });
           return;
         }
         finishReveal();
@@ -241,7 +254,7 @@ export function App() {
           <Canvas
             shadows
             dpr={[1, 1.75]}
-            camera={{ position: [2.25, 1.42, 3.2], fov: 38 }}
+            camera={{ position: [2.55, 1.72, 4.35], fov: 42 }}
             gl={{
               antialias: true,
               toneMapping: THREE.ACESFilmicToneMapping,
@@ -261,6 +274,7 @@ export function App() {
                 canInsert={!busy}
                 onInsert={() => show(generate(makeSeed()), "vend")}
               />
+              <Crowd phase={phase} advance={advance} />
               <WorldCopy
                 phase={phase}
                 product={product}
@@ -281,10 +295,25 @@ export function App() {
           ) : null}
         </div>
         <div className="controls">
+          {askNext ? (
+            <div className="next-ask" role="dialog" aria-labelledby="next-ask-title">
+              <p className="kicker">Turn over</p>
+              <h2 id="next-ask-title">Call the next person?</h2>
+              <p>The one at the rope has a coin ready.</p>
+              <div className="next-actions">
+                <button type="button" onClick={() => { setAskNext(false); setAdvance((count) => count + 1); }}>
+                  Yes, next
+                </button>
+                <button type="button" className="quiet" onClick={() => setAskNext(false)}>
+                  Not yet
+                </button>
+              </div>
+            </div>
+          ) : null}
           <button type="button" className="coin" disabled={busy} onClick={() => show(generate(makeSeed()), "vend")}>
             {phase === "vending" ? "Dispensing" : phase === "reality" ? "Five seconds" : product ? "Insert another coin" : "Insert coin"}
           </button>
-          <p>Drag to look around the machine. Drag the coin into the slot, or press insert.</p>
+          <p>A queue is waiting. Drag around the floor to see them, or drag the coin into the slot.</p>
         </div>
       </main>
       <aside className="side">

@@ -57,6 +57,30 @@ h1 { font-weight: 560; font-size: clamp(28px, 3vw, 44px); letter-spacing: -0.03e
   padding: 8px 24px 28px;
 }
 .controls p { color: var(--muted); }
+.next-ask {
+  width: min(440px, calc(100% - 24px));
+  padding: 14px 16px 16px;
+  border: 1px solid rgba(224, 177, 90, 0.45);
+  border-radius: 16px;
+  background: rgba(16, 14, 12, 0.94);
+  text-align: center;
+}
+.next-ask h2 { font-size: 26px; font-weight: 560; letter-spacing: -0.03em; margin: 6px 0 8px; }
+.next-ask p { margin: 0; }
+.next-actions { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+.next-actions button {
+  appearance: none;
+  border: 1px solid rgba(224, 177, 90, 0.45);
+  background: #e0b15a;
+  color: #24180c;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.next-actions .quiet { background: transparent; color: var(--ink); }
 .coin {
   appearance: none;
   border: 0;
