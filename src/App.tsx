@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { playClunk, playStinger, startPlanet, stopPlanet, unlockAudio } from "./audio";
 import { loadCabinet, remember, shareUrl, type CabinetItem } from "./cabinet";
 import { generate, isHighRarity, type Product } from "./generate";
+import { displayLine, noteVisit } from "./machine/personality";
 import { isSeed, makeSeed } from "./rng";
 import { Gallery, Machine, type Phase } from "./scene/Machine";
 import { Reality } from "./scene/Reality";
@@ -43,7 +44,9 @@ export function App() {
     if (!starting.current) return "idle";
     return starting.current.type === "reality" ? "reality" : "revealed";
   });
-  const [cabinet, setCabinet] = useState<CabinetItem[]>([]);
+  const [cabinet, setCabinet] = useState<CabinetItem[]>(() => loadCabinet());
+  const [visits] = useState(() => noteVisit());
+  const [now, setNow] = useState(() => Date.now());
   const [mark, setMark] = useState(() => (starting.current ? performance.now() : 0));
   const [moment, setMoment] = useState(
     () =>
@@ -133,6 +136,11 @@ export function App() {
   };
 
   useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     setCanShare(typeof navigator.share === "function");
     const owned = loadCabinet();
     const shared = starting.current;
@@ -202,6 +210,17 @@ export function App() {
   const sky = product?.payload.kind === "reality" ? product.payload.sky : "#14110e";
   const busy = phase === "vending" || phase === "reality" || moment;
   const showPlinth = phase === "revealed" && !moment;
+  const impossibleKept = cabinet.some((item) => item.rarity === "impossible");
+  const readout = displayLine({
+    phase,
+    rarity: product?.rarity ?? null,
+    seed: product?.seed ?? null,
+    visits,
+    discoveries: cabinet.length,
+    impossibleKept,
+    vendStarted: mark,
+    now,
+  });
 
   return (
     <div className="shell" data-rarity={product?.rarity ?? "none"} data-phase={phase}>
@@ -235,7 +254,11 @@ export function App() {
           </Canvas>
           <PlinthCard product={product} hidden={!showPlinth} listening={listening} />
           <CreatureLabel product={product} hidden={!showPlinth} />
-          {phase === "vending" ? <p className="vend-status">The coil is turning</p> : null}
+          {phase !== "reality" ? (
+            <p className="readout" data-tone={readout.tone} aria-live="polite">
+              {readout.text}
+            </p>
+          ) : null}
           {phase === "reality" && product?.payload.kind === "reality" ? (
             <RealityOverlay spec={product.payload} startedAt={mark} copied={copied} onCopy={() => void copyLink()} />
           ) : null}

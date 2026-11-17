@@ -1,7 +1,7 @@
 import { useMemo, useRef, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, RoundedBox } from "@react-three/drei";
-import type { Group, Mesh, PointLight } from "three";
+import type { Group, Mesh, MeshStandardMaterial, PointLight } from "three";
 import * as THREE from "three";
 import { RARITY_COLOR, type Product, type Rarity } from "../generate";
 import { Creature } from "./Creature";
@@ -9,6 +9,20 @@ import { Creature } from "./Creature";
 export type Phase = "idle" | "vending" | "revealed" | "reality";
 
 const VEND_EASE = (t: number) => 1 - (1 - t) ** 3;
+
+function idleTwitch(t: number): { active: boolean; x: number; z: number; flap: number } {
+  const local = t % 9;
+  if (local > 0.42) return { active: false, x: 0, z: 0, flap: 0 };
+  const fade = 1 - local / 0.42;
+  const swing = Math.sin(local * 42) * fade;
+  const dir = Math.floor(t / 9) % 2 === 0 ? 1 : -1;
+  return {
+    active: true,
+    x: swing * 0.01 * dir,
+    z: swing * 0.012 * dir,
+    flap: swing * 0.35,
+  };
+}
 
 function progressOf(phase: Phase, vendStarted: number, vendMs: number): number {
   if (phase === "idle") return 0;
@@ -170,24 +184,79 @@ export function Machine({
   const creatureWrap = useRef<Group>(null);
   const bulb = useRef<PointLight>(null);
   const spin = useRef<Group>(null);
+  const rig = useRef<Group>(null);
+  const lamp = useRef<MeshStandardMaterial>(null);
   const rarity: Rarity | null = product?.rarity ?? null;
   const creature = product?.type === "creature" && product.payload.kind === "creature" ? product.payload : null;
 
   useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
     const progress = progressOf(phase, vendStarted, vendMs);
     const vending = phase === "vending";
-    if (spin.current) spin.current.rotation.y += vending ? 0.18 : 0.01;
+    const twitch = idleTwitch(t);
+    const acknowledging = vending && progress < 0.28;
+
+    if (spin.current) {
+      let speed = 0.012;
+      if (vending && rarity === "legendary") speed = 0.42;
+      else if (vending && rarity === "rare") speed = 0.24;
+      else if (vending && rarity === "impossible") speed = Math.sin(t * 9) > 0.35 ? 0.55 : 0;
+      else if (vending) speed = 0.18;
+      else if (twitch.active) speed = 0.09;
+      spin.current.rotation.y += speed;
+    }
 
     if (bulb.current) {
-      const pulse = 1.6 + Math.sin(clock.elapsedTime * 2.2) * 0.35;
-      const boost = rarity === "impossible" ? 4 : rarity === "legendary" ? 2.4 : 0;
-      bulb.current.intensity = phase === "revealed" ? pulse + boost : pulse;
+      const dip = Math.sin(t * 13.7) * Math.sin(t * 2.3);
+      let intensity = dip > 0.82 ? 0.45 : 1.55 + dip * 0.12;
+      if (acknowledging) intensity = 4.2;
+      if (vending && rarity === "rare") intensity = Math.sin(t * 48) > 0 ? 5.5 : 0.25;
+      if (vending && rarity === "legendary") intensity = 2.4 + Math.abs(Math.sin(t * 22)) * 4;
+      if (vending && rarity === "impossible") intensity = Math.sin(t * 60) > 0.15 ? 7 : 0.04;
+      if (phase === "revealed" && rarity === "impossible") intensity = 1.2 + Math.abs(Math.sin(t * 8)) * 2.5;
+      bulb.current.intensity = intensity;
+    }
+
+    if (lamp.current) {
+      lamp.current.emissiveIntensity = acknowledging ? 6 : 1.2;
+    }
+
+    if (rig.current) {
+      let x = 0;
+      let z = 0;
+      let pitch = 0;
+      if (phase === "idle" && twitch.active) {
+        x = twitch.x;
+        z = twitch.z;
+      }
+      if (vending && acknowledging) pitch = Math.sin(progress / 0.28 * Math.PI) * 0.03;
+      if (vending && rarity === "rare") {
+        x = Math.sin(t * 46) * 0.014;
+        z = Math.sin(t * 37) * 0.01;
+      }
+      if (vending && rarity === "legendary") {
+        x = Math.sin(t * 34) * 0.03;
+        z = Math.sin(t * 28) * 0.028;
+        pitch = Math.sin(t * 22) * 0.045;
+      }
+      if (vending && rarity === "impossible") {
+        const jam = Math.sin(t * 9) > 0.4;
+        x = jam ? 0.04 : -0.015;
+        z = jam ? -0.03 : 0.02;
+        pitch = jam ? 0.05 : -0.02;
+      }
+      rig.current.position.x = x;
+      rig.current.rotation.z = z;
+      rig.current.rotation.x = pitch;
     }
 
     if (flap.current) {
       let angle = 0;
       if (progress >= 0.55 && progress < 0.86) angle = -1.15 * VEND_EASE((progress - 0.55) / 0.31);
       else if (progress >= 0.86) angle = -0.28;
+      if (phase === "idle") angle = twitch.flap;
+      if (vending && rarity === "legendary") angle += Math.sin(t * 30) * 0.2;
+      if (vending && rarity === "impossible") angle += Math.sin(t * 9) > 0.4 ? -0.7 : 0.05;
       flap.current.rotation.x = angle;
     }
 
@@ -222,7 +291,7 @@ export function Machine({
   const podColor = rarity ? RARITY_COLOR[rarity] : "#e0b15a";
 
   return (
-    <group visible={phase !== "reality"}>
+    <group ref={rig} visible={phase !== "reality"}>
       <group position={[0, 1.08, 0]}>
         <CabinetShell />
         <mesh position={[0, 0.12, 0.34]}>
@@ -247,7 +316,7 @@ export function Machine({
         </mesh>
         <mesh position={[0.66, 0.4, 0.35]}>
           <sphereGeometry args={[0.018, 12, 12]} />
-          <meshStandardMaterial color="#ffe1a3" emissive="#e0b15a" emissiveIntensity={1.2} />
+          <meshStandardMaterial ref={lamp} color="#ffe1a3" emissive="#e0b15a" emissiveIntensity={1.2} />
         </mesh>
         <group ref={flap} position={[0, -0.92, 0.28]}>
           <mesh position={[0, -0.07, 0.08]}>
