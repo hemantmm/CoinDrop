@@ -1,6 +1,6 @@
 import { useMemo, useRef, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, RoundedBox } from "@react-three/drei";
+import { ContactShadows, OrbitControls, RoundedBox } from "@react-three/drei";
 import type { Group, Mesh, MeshStandardMaterial, PointLight } from "three";
 import * as THREE from "three";
 import { RARITY_COLOR, type Product, type Rarity } from "../generate";
@@ -40,25 +40,38 @@ export function Gallery({
   sky: string;
   children: ReactNode;
 }) {
-  const { scene } = useThree();
-  const desired = useRef(new THREE.Vector3(0.22, 1.12, 4.35));
+  const { scene, camera } = useThree();
   const painted = useRef("");
+  const realityPose = useRef(new THREE.Vector3(0, 1.25, 5.2));
 
-  useFrame(({ camera, clock }) => {
+  useFrame(() => {
     const color = phase === "reality" ? sky : "#14110e";
     if (painted.current !== color) {
       scene.background = new THREE.Color(color);
       painted.current = color;
     }
-    const drift = Math.sin(clock.elapsedTime * 0.18) * 0.05;
-    if (phase === "reality") desired.current.set(0, 1.25, 5.2);
-    else desired.current.set(0.22 + drift, 1.12, 4.35);
-    camera.position.lerp(desired.current, 0.06);
-    camera.lookAt(0, 0.92, 0);
+    if (phase !== "reality") return;
+    camera.position.lerp(realityPose.current, 0.06);
+    camera.lookAt(0, 1.05, 0);
   });
 
   return (
     <>
+      {phase !== "reality" ? (
+          <OrbitControls
+          makeDefault
+          enablePan={false}
+          enableDamping
+          dampingFactor={0.08}
+          target={[0, 0.95, 0]}
+          minDistance={2.6}
+          maxDistance={6.8}
+          minPolarAngle={0.5}
+          maxPolarAngle={1.45}
+          minAzimuthAngle={-1.15}
+          maxAzimuthAngle={1.15}
+        />
+      ) : null}
       {phase !== "reality" ? <fog attach="fog" args={["#14110e", 7.5, 13]} /> : null}
       <hemisphereLight args={["#f0e2cc", "#241c16", 0.55]} />
       <spotLight
@@ -85,6 +98,38 @@ export function Gallery({
       ) : null}
     </>
   );
+}
+
+const COIN_REST = new THREE.Vector3(0.92, 0.5, 1.55);
+const COIN_SLOT = new THREE.Vector3(0.66, 1.36, 0.4);
+const coinPointer = new THREE.Vector2();
+const coinRay = new THREE.Raycaster();
+const coinHit = new THREE.Vector3();
+const coinPlane = new THREE.Plane();
+const coinNormal = new THREE.Vector3();
+const coinMid = new THREE.Vector3();
+const coinLaunch = new THREE.Vector3();
+const coinBob = new THREE.Vector3();
+
+function pointOnCoinPlane(clientX: number, clientY: number, camera: THREE.Camera, element: HTMLCanvasElement) {
+  const rect = element.getBoundingClientRect();
+  coinPointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  coinPointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  coinRay.setFromCamera(coinPointer, camera);
+  coinNormal.copy(camera.position).sub(COIN_SLOT).normalize();
+  coinPlane.setFromNormalAndCoplanarPoint(coinNormal, COIN_SLOT);
+  return coinRay.ray.intersectPlane(coinPlane, coinHit);
+}
+
+function curveCoin(from: THREE.Vector3, amount: number, target: THREE.Vector3) {
+  coinMid.copy(from).lerp(COIN_SLOT, 0.5);
+  coinMid.y += 0.42;
+  const remain = 1 - amount;
+  target
+    .copy(from)
+    .multiplyScalar(remain * remain)
+    .addScaledVector(coinMid, 2 * remain * amount)
+    .addScaledVector(COIN_SLOT, amount * amount);
 }
 
 function CabinetShell() {
@@ -171,14 +216,18 @@ export function Machine({
   vendStarted,
   vendMs,
   product,
+  canInsert,
+  onInsert,
 }: {
   phase: Phase;
   vendStarted: number;
   vendMs: number;
   product: Product | null;
+  canInsert: boolean;
+  onInsert: () => void;
 }) {
   const flap = useRef<Group>(null);
-  const coin = useRef<Mesh>(null);
+  const coin = useRef<Group>(null);
   const drop = useRef<Group>(null);
   const pod = useRef<Mesh>(null);
   const creatureWrap = useRef<Group>(null);
@@ -186,6 +235,13 @@ export function Machine({
   const spin = useRef<Group>(null);
   const rig = useRef<Group>(null);
   const lamp = useRef<MeshStandardMaterial>(null);
+  const held = useRef(false);
+  const wasVending = useRef(false);
+  const insertRef = useRef(onInsert);
+  const allowRef = useRef(canInsert);
+  insertRef.current = onInsert;
+  allowRef.current = canInsert;
+  const { camera, gl, controls } = useThree();
   const rarity: Rarity | null = product?.rarity ?? null;
   const creature = product?.type === "creature" && product.payload.kind === "creature" ? product.payload : null;
 
@@ -261,14 +317,28 @@ export function Machine({
     }
 
     if (coin.current) {
-      const traveling = vending && progress < 0.24;
-      coin.current.visible = phase === "idle" || traveling;
-      if (phase === "idle") {
-        coin.current.position.set(0.66, 1.38 + Math.sin(clock.elapsedTime * 2) * 0.015, 0.42);
-      } else if (traveling) {
-        const t = VEND_EASE(progress / 0.24);
-        coin.current.position.set(0.66 - t * 0.08, 1.38 - t * 0.12, 0.42 - t * 0.16);
+      const mesh = coin.current;
+      const vendingNow = vending;
+      if (vendingNow && !wasVending.current) coinLaunch.copy(mesh.position);
+      wasVending.current = vendingNow;
+
+      if (held.current) {
+        mesh.visible = true;
+      } else if (vendingNow && progress < 0.46) {
+        const amount = VEND_EASE(Math.min(1, progress / 0.46));
+        curveCoin(coinLaunch, amount, mesh.position);
+        mesh.visible = true;
+      } else if (vendingNow || phase === "reality") {
+        mesh.visible = false;
+      } else {
+        mesh.visible = true;
+        coinBob.copy(COIN_REST);
+        coinBob.y += Math.sin(t * 2) * 0.03;
+        mesh.position.lerp(coinBob, 0.18);
       }
+      const closeness = THREE.MathUtils.clamp(1 - mesh.position.distanceTo(COIN_SLOT) / 1.5, 0, 1);
+      mesh.scale.setScalar(THREE.MathUtils.lerp(1.35, 0.62, closeness));
+      if (mesh.visible) mesh.quaternion.copy(camera.quaternion);
     }
 
     const falling = progress > 0.46;
@@ -339,10 +409,48 @@ export function Machine({
         <meshStandardMaterial color="#cbb892" metalness={0.6} roughness={0.28} />
       </mesh>
 
-      <mesh ref={coin} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.048, 0.048, 0.012, 24]} />
-        <meshStandardMaterial color="#ffd98a" emissive="#e0b15a" emissiveIntensity={0.45} metalness={1} roughness={0.18} />
-      </mesh>
+      <group
+        ref={coin}
+        position={[COIN_REST.x, COIN_REST.y, COIN_REST.z]}
+        onPointerOver={() => {
+          if (allowRef.current) gl.domElement.style.cursor = "grab";
+        }}
+        onPointerOut={() => {
+          if (!held.current) gl.domElement.style.cursor = "";
+        }}
+        onPointerDown={(event) => {
+          if (!allowRef.current || phase === "vending" || phase === "reality") return;
+          event.stopPropagation();
+          held.current = true;
+          gl.domElement.style.cursor = "grabbing";
+          const orbit = controls as { enabled?: boolean } | null;
+          if (orbit) orbit.enabled = false;
+          const place = (native: PointerEvent) => {
+            const hit = pointOnCoinPlane(native.clientX, native.clientY, camera, gl.domElement);
+            if (hit && coin.current) coin.current.position.copy(hit);
+          };
+          const release = () => {
+            gl.domElement.removeEventListener("pointermove", place);
+            gl.domElement.removeEventListener("pointerup", release);
+            gl.domElement.style.cursor = "";
+            if (orbit) orbit.enabled = true;
+            const nearSlot = coin.current ? coin.current.position.distanceTo(COIN_SLOT) < 0.34 : false;
+            held.current = false;
+            if (nearSlot && allowRef.current) insertRef.current();
+          };
+          gl.domElement.addEventListener("pointermove", place);
+          gl.domElement.addEventListener("pointerup", release);
+        }}
+      >
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.11, 0.11, 0.02, 40]} />
+          <meshStandardMaterial color="#ffd98a" emissive="#e0b15a" emissiveIntensity={0.45} metalness={1} roughness={0.18} />
+        </mesh>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.045, 0.045, 0.024, 24]} />
+          <meshStandardMaterial color="#8a5a22" metalness={0.8} roughness={0.3} />
+        </mesh>
+      </group>
 
       <group ref={drop} position={[0, 0.42, 0.95]}>
         <mesh ref={pod}>

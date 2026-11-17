@@ -243,10 +243,20 @@ export function App() {
               toneMapping: THREE.ACESFilmicToneMapping,
               toneMappingExposure: 1.15,
             }}
-            onCreated={({ camera }) => camera.lookAt(0, 0.92, 0)}
+            onCreated={({ camera, gl }) => {
+              camera.lookAt(0, 0.92, 0);
+              gl.domElement.style.touchAction = "none";
+            }}
           >
             <Gallery phase={phase} sky={sky}>
-              <Machine phase={phase} vendStarted={mark} vendMs={VEND_MS} product={product} />
+              <Machine
+                phase={phase}
+                vendStarted={mark}
+                vendMs={VEND_MS}
+                product={product}
+                canInsert={!busy}
+                onInsert={() => show(generate(makeSeed()), "vend")}
+              />
               {phase === "reality" && product?.payload.kind === "reality" ? (
                 <Reality spec={product.payload} startedAt={mark} />
               ) : null}
@@ -270,7 +280,7 @@ export function App() {
           <button type="button" className="coin" disabled={busy} onClick={() => show(generate(makeSeed()), "vend")}>
             {phase === "vending" ? "Dispensing" : phase === "reality" ? "Five seconds" : product ? "Insert another coin" : "Insert coin"}
           </button>
-          <p>Some objects are extraordinarily rare.</p>
+          <p>Drag to look around the machine. Drag the coin into the slot, or press insert.</p>
         </div>
       </main>
       <aside className="side">
