@@ -10,7 +10,7 @@ import { Crowd } from "./scene/Crowd";
 import { Gallery, Machine, type Phase } from "./scene/Machine";
 import { WorldCopy } from "./scene/Labels";
 import { Reality } from "./scene/Reality";
-import { claimSlot, todayStock, type DayStock } from "./stock";
+import { claimSlot, GIFT_TOPICS, todayStock, type DayStock, type GiftTopic } from "./stock";
 import { Cabinet } from "./ui/Cabinet";
 import { Moment, RealityOverlay, Receipt } from "./ui/Receipt";
 import { StockBoard } from "./ui/StockBoard";
@@ -66,6 +66,7 @@ export function App() {
   const [advance, setAdvance] = useState(0);
   const handed = useRef<string | null>(null);
   const [stock, setStock] = useState<DayStock>(() => todayStock());
+  const [selectedTopic, setSelectedTopic] = useState<GiftTopic>("technology");
   const [canShare, setCanShare] = useState(false);
   const timers = useRef<number[]>([]);
   const copyTimer = useRef<number | null>(null);
@@ -158,8 +159,8 @@ export function App() {
   };
 
   const takeNext = () => {
-    if (busy || stock.soldOut || !stock.next) return;
-    const slot = stock.next;
+    const slot = stock.slots.find((item) => !item.claimed && item.topic === selectedTopic);
+    if (busy || !slot) return;
     claimSlot(slot.index);
     setStock(todayStock());
     setCabinet(remember(slot.product));
@@ -240,21 +241,22 @@ export function App() {
 
   const sky = product?.payload.kind === "reality" ? product.payload.sky : "#14110e";
   const busy = phase === "vending" || phase === "reality" || moment;
+  const selectedGift = stock.slots.find((item) => !item.claimed && item.topic === selectedTopic) ?? null;
   const showPlinth = phase === "revealed" && !moment;
   const impossibleKept = cabinet.some((item) => item.rarity === "impossible");
-  const closed = stock.soldOut && phase !== "vending" && phase !== "reality";
+  const closed = !selectedGift && phase !== "vending" && phase !== "reality";
   const readout: Readout = closed
     ? {
         label: "Closed",
-        text: "Come back tomorrow.",
-        detail: "Today's prizes are gone. Tomorrow holds more exciting ones.",
+        text: stock.soldOut ? "Come back tomorrow." : "Choose another topic.",
+        detail: stock.soldOut ? "Today's gifts are gone. Tomorrow the case will be full again." : `There are no ${GIFT_TOPICS.find((topic) => topic.id === selectedTopic)?.label.toLowerCase()} gifts left today.`,
         tone: "warn",
       }
-    : phase === "idle" && stock.next
+    : phase === "idle" && selectedGift
       ? {
-          label: "Your coin",
-          text: stock.next.product.title,
-          detail: "This family is at the glass. When their turn ends, they leave and the next family steps up.",
+          label: "Your pick",
+          text: selectedGift.product.title,
+          detail: `You chose ${GIFT_TOPICS.find((topic) => topic.id === selectedTopic)?.label}. Put in a coin to claim this gift.`,
           tone: "warn",
         }
       : displayLine({
@@ -303,7 +305,7 @@ export function App() {
                 vendStarted={mark}
                 vendMs={VEND_MS}
                 product={product}
-                canInsert={!busy && !stock.soldOut}
+                canInsert={!busy && Boolean(selectedGift)}
                 onInsert={takeNext}
                 stock={stock.slots.map((slot) => ({
                   shape: slot.shape,
@@ -340,28 +342,52 @@ export function App() {
           ) : null}
         </div>
         <div className="controls">
-          {closed ? (
-            <div className="next-ask closed-note" role="status">
-              <p className="kicker">Sold out</p>
-              <h2>Come back tomorrow</h2>
-              <p>Today's prizes are finished. Return tomorrow to continue, and for more exciting prizes.</p>
+          {!stock.soldOut ? (
+            <div className="topic-picker" aria-label="Choose a gift topic">
+              <p className="kicker">Choose what you’re into</p>
+              <div className="topic-options" role="group" aria-label="Gift topics">
+                {GIFT_TOPICS.map((topic) => {
+                  const available = stock.slots.filter((slot) => !slot.claimed && slot.topic === topic.id);
+                  return (
+                    <button
+                      key={topic.id}
+                      type="button"
+                      className={selectedTopic === topic.id ? "topic-option selected" : "topic-option"}
+                      aria-pressed={selectedTopic === topic.id}
+                      onClick={() => setSelectedTopic(topic.id)}
+                    >
+                      <strong>{topic.label}</strong>
+                      <small>{available.length ? `${available.length} gift${available.length === 1 ? "" : "s"} · ${available[0]?.product.title}` : "No gifts left today"}</small>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ) : null}
-          <button type="button" className="coin" disabled={busy || stock.soldOut} onClick={takeNext}>
+          {closed ? (
+            <div className="next-ask closed-note" role="status">
+              <p className="kicker">Topic empty</p>
+              <h2>{stock.soldOut ? "Come back tomorrow" : "Choose another topic"}</h2>
+              <p>{stock.soldOut ? "Today's gifts are finished. Come back tomorrow for a new case." : `There are no ${GIFT_TOPICS.find((topic) => topic.id === selectedTopic)?.label.toLowerCase()} gifts left today. Pick another topic to keep playing.`}</p>
+            </div>
+          ) : null}
+          <button type="button" className="coin" disabled={busy || !selectedGift} onClick={takeNext}>
             {stock.soldOut
               ? "Come back tomorrow"
-              : phase === "vending"
-                ? "Dispensing"
-                : phase === "reality"
-                  ? "Five seconds"
-                  : product
-                    ? "Another one for them"
-                    : "Drop the coin for them"}
+              : !selectedGift
+                ? "Choose another topic"
+                : phase === "vending"
+                  ? "Dispensing"
+                  : phase === "reality"
+                    ? "Five seconds"
+                    : product
+                      ? "Insert another coin"
+                      : "Insert a coin"}
           </button>
           <p>
             {stock.soldOut
               ? "The case is empty until tomorrow."
-              : `${stock.remaining} prizes are still in the case. When this family's turn ends, they walk off and the next parent and kids come up.`}
+              : `${stock.remaining} gifts remain. Drag the coin to the slot, or use this button to play.`}
           </p>
         </div>
       </main>

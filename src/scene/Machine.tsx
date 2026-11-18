@@ -278,17 +278,12 @@ function PrizeShape({ shape, color }: { shape: string; color: string }) {
 }
 
 function Shelves({ marks }: { marks: { shape: string; color: string; claimed: boolean }[] }) {
-  const spots: [number, number][] = [
-    [-0.36, 0.48],
-    [0, 0.48],
-    [0.36, 0.48],
-    [-0.36, -0.12],
-    [0, -0.12],
-    [0.36, -0.12],
-  ];
+  const spots: [number, number][] = [-0.39, -0.13, 0.13, 0.39].flatMap((x): [number, number][] =>
+    [0.57, 0.17, -0.23, -0.63].map((y): [number, number] => [x, y]),
+  );
   return (
     <group>
-      {[0.34, -0.26].map((y) => (
+      {[0.76, 0.36, -0.04, -0.44, -0.84].map((y) => (
         <mesh key={y} position={[0, y, -0.02]}>
           <boxGeometry args={[1.05, 0.02, 0.28]} />
           <meshStandardMaterial color="#3a3128" roughness={0.7} />

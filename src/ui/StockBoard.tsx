@@ -6,7 +6,7 @@ export function StockBoard({ slots }: { slots: StockSlot[] }) {
   return (
     <section className="stock">
       <div className="cabinet-head">
-        <p className="kicker">What the kids can see</p>
+        <p className="kicker">Gifts in the case</p>
         <p className="serial">{remaining} left</p>
       </div>
       <ol>
