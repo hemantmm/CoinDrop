@@ -5,8 +5,92 @@ import type { Group, Mesh, MeshStandardMaterial, PointLight } from "three";
 import * as THREE from "three";
 import { RARITY_COLOR, type Product, type Rarity } from "../generate";
 import { Creature } from "./Creature";
+import type { GiftTopic } from "../stock";
+import { playCoinPickup } from "../audio";
 
 export type Phase = "idle" | "vending" | "revealed" | "reality";
+
+export const THEME_CONFIG: Record<GiftTopic, {
+  bg: string;
+  wall: string;
+  sideWall: string;
+  floor: string;
+  spotA: string;
+  spotB: string;
+  hemiSky: string;
+  hemiGround: string;
+  lamp: string;
+  bulb: string;
+  coinGlow: string;
+  lfA: string;
+  lfB: string;
+  lfC: string;
+}> = {
+  technology: {
+    bg: "#030712",
+    wall: "#040814",
+    sideWall: "#050b18",
+    floor: "#060d1a",
+    spotA: "#c0d8ff",
+    spotB: "#00f5ff",
+    hemiSky: "#00a8ff",
+    hemiGround: "#0a0510",
+    lamp: "#00f5ff",
+    bulb: "#00aaff",
+    coinGlow: "#00f5ff",
+    lfA: "#8ab8ff",
+    lfB: "#00f5ff",
+    lfC: "#bf5af2",
+  },
+  audio: {
+    bg: "#090314",
+    wall: "#0d041c",
+    sideWall: "#120626",
+    floor: "#160830",
+    spotA: "#e9d5ff",
+    spotB: "#ff2d78",
+    hemiSky: "#bf5af2",
+    hemiGround: "#180424",
+    lamp: "#ff2d78",
+    bulb: "#bf5af2",
+    coinGlow: "#bf5af2",
+    lfA: "#d8b4fe",
+    lfB: "#ff2d78",
+    lfC: "#38bdf8",
+  },
+  snacks: {
+    bg: "#120603",
+    wall: "#1c0a04",
+    sideWall: "#240d05",
+    floor: "#2a1007",
+    spotA: "#ffedd5",
+    spotB: "#ff9e3b",
+    hemiSky: "#f59e0b",
+    hemiGround: "#290c04",
+    lamp: "#ff9e3b",
+    bulb: "#ffaa00",
+    coinGlow: "#ffb703",
+    lfA: "#fde68a",
+    lfB: "#fb923c",
+    lfC: "#f43f5e",
+  },
+  style: {
+    bg: "#02120a",
+    wall: "#03170d",
+    sideWall: "#042012",
+    floor: "#062b18",
+    spotA: "#d1fae5",
+    spotB: "#00ff88",
+    hemiSky: "#10b981",
+    hemiGround: "#022c16",
+    lamp: "#00ff88",
+    bulb: "#10b981",
+    coinGlow: "#00ff88",
+    lfA: "#a7f3d0",
+    lfB: "#34d399",
+    lfC: "#facc15",
+  },
+};
 
 const VEND_EASE = (t: number) => 1 - (1 - t) ** 3;
 
@@ -34,21 +118,27 @@ function progressOf(phase: Phase, vendStarted: number, vendMs: number): number {
 export function Gallery({
   phase,
   sky,
+  topic = "technology",
   children,
 }: {
   phase: Phase;
   sky: string;
+  topic?: GiftTopic;
   children: ReactNode;
 }) {
   const { scene, camera } = useThree();
-  const painted = useRef("");
   const realityPose = useRef(new THREE.Vector3(0, 1.25, 5.2));
+  const theme = THEME_CONFIG[topic] ?? THEME_CONFIG.technology;
+  const currentBg = useRef(new THREE.Color(theme.bg));
+  const targetBg = useRef(new THREE.Color(theme.bg));
 
-  useFrame(() => {
-    const color = phase === "reality" ? sky : "#14110e";
-    if (painted.current !== color) {
-      scene.background = new THREE.Color(color);
-      painted.current = color;
+  useFrame((_, delta) => {
+    const dest = phase === "reality" ? sky : theme.bg;
+    targetBg.current.set(dest);
+    currentBg.current.lerp(targetBg.current, 1 - Math.exp(-delta * 3.5));
+    scene.background = currentBg.current;
+    if (scene.fog) {
+      (scene.fog as THREE.Fog).color.copy(currentBg.current);
     }
     if (phase !== "reality") return;
     camera.position.lerp(realityPose.current, 0.06);
@@ -58,7 +148,7 @@ export function Gallery({
   return (
     <>
       {phase !== "reality" ? (
-          <OrbitControls
+        <OrbitControls
           makeDefault
           enablePan={false}
           enableDamping
@@ -72,38 +162,38 @@ export function Gallery({
           maxAzimuthAngle={0.95}
         />
       ) : null}
-      {phase !== "reality" ? <fog attach="fog" args={["#14110e", 9, 16]} /> : null}
-      <hemisphereLight args={["#f3e6d0", "#1a140f", 0.35]} />
+      {phase !== "reality" ? <fog attach="fog" args={[theme.bg, 9, 16]} /> : null}
+      <hemisphereLight args={[theme.hemiSky, theme.hemiGround, 0.42]} />
       <spotLight
         position={[2.6, 5.2, 3.4]}
         angle={0.42}
         penumbra={0.75}
-        intensity={46}
-        color="#ffe2c2"
+        intensity={52}
+        color={theme.spotA}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
         shadow-bias={-0.0002}
       />
-      <spotLight position={[-3.2, 2.4, 2.2]} angle={0.6} penumbra={1} intensity={18} color="#9eb6ff" />
+      <spotLight position={[-3.2, 2.4, 2.2]} angle={0.6} penumbra={1} intensity={24} color={theme.spotB} />
       <Environment resolution={256} frames={1}>
-        <Lightformer form="rect" intensity={3.2} position={[0, 3.4, 2]} scale={[7, 3, 1]} color="#ffe7c8" />
-        <Lightformer form="rect" intensity={1.6} position={[-3.5, 1.5, 1]} scale={[2, 3, 1]} color="#b9cfff" />
-        <Lightformer form="rect" intensity={1.2} position={[3.2, 1.2, -1]} scale={[2.4, 1.6, 1]} color="#e0b15a" />
+        <Lightformer form="rect" intensity={3.2} position={[0, 3.4, 2]} scale={[7, 3, 1]} color={theme.lfA} />
+        <Lightformer form="rect" intensity={1.6} position={[-3.5, 1.5, 1]} scale={[2, 3, 1]} color={theme.lfB} />
+        <Lightformer form="rect" intensity={1.2} position={[3.2, 1.2, -1]} scale={[2.4, 1.6, 1]} color={theme.lfC} />
       </Environment>
       {children}
       {phase !== "reality" ? (
         <>
           <RoundedBox args={[10.4, 0.22, 7.2]} position={[0.2, -0.11, 0.55]} radius={0.04} smoothness={2} receiveShadow>
-            <meshStandardMaterial color="#221c17" metalness={0.35} roughness={0.55} />
+            <meshStandardMaterial color={theme.floor} metalness={0.6} roughness={0.4} />
           </RoundedBox>
           <mesh position={[0, 1.7, -1.7]} receiveShadow>
             <planeGeometry args={[12, 5.5]} />
-            <meshStandardMaterial color="#14110e" roughness={0.9} />
+            <meshStandardMaterial color={theme.wall} roughness={0.9} />
           </mesh>
           <mesh position={[-3.6, 1.4, -0.2]} rotation={[0, Math.PI / 2, 0]}>
             <planeGeometry args={[4, 4.5]} />
-            <meshStandardMaterial color="#17130f" roughness={0.95} />
+            <meshStandardMaterial color={theme.sideWall} roughness={0.95} />
           </mesh>
           <ContactShadows position={[0, 0.01, 0.4]} opacity={0.55} scale={8} blur={2.2} far={2.6} />
         </>
@@ -144,8 +234,8 @@ function curveCoin(from: THREE.Vector3, amount: number, target: THREE.Vector3) {
     .addScaledVector(COIN_SLOT, amount * amount);
 }
 
-function Brass({ color = "#8d6a3e" }: { color?: string }) {
-  return <meshPhysicalMaterial color={color} metalness={1} roughness={0.28} clearcoat={0.45} clearcoatRoughness={0.28} />;
+function Brass({ color = "#1a2535" }: { color?: string }) {
+  return <meshPhysicalMaterial color={color} metalness={0.85} roughness={0.2} clearcoat={0.45} clearcoatRoughness={0.28} />;
 }
 
 function CabinetShell() {
@@ -155,20 +245,20 @@ function CabinetShell() {
         <Brass />
       </RoundedBox>
       <RoundedBox args={[0.09, 1.96, 0.64]} radius={0.02} smoothness={2} position={[-0.62, 0, 0.02]} castShadow>
-        <Brass color="#7d5c34" />
+        <Brass color="#0d1420" />
       </RoundedBox>
       <RoundedBox args={[0.09, 1.96, 0.64]} radius={0.02} smoothness={2} position={[0.62, 0, 0.02]} castShadow>
-        <Brass color="#7d5c34" />
+        <Brass color="#0d1420" />
       </RoundedBox>
       <RoundedBox args={[1.36, 0.12, 0.7]} radius={0.02} smoothness={2} position={[0, 1.0, 0.02]} castShadow>
-        <Brass color="#9a7344" />
+        <Brass color="#1a2a3a" />
       </RoundedBox>
       <RoundedBox args={[1.36, 0.14, 0.7]} radius={0.02} smoothness={2} position={[0, -0.96, 0.02]} castShadow>
-        <Brass color="#6a4d28" />
+        <Brass color="#0a1018" />
       </RoundedBox>
       <mesh position={[0, 0.12, -0.22]}>
         <planeGeometry args={[1.16, 1.7]} />
-        <meshStandardMaterial color="#1a1612" roughness={0.9} />
+        <meshStandardMaterial color="#0d1118" roughness={0.9} />
       </mesh>
     </group>
   );
@@ -286,7 +376,7 @@ function Shelves({ marks }: { marks: { shape: string; color: string; claimed: bo
       {[0.76, 0.36, -0.04, -0.44, -0.84].map((y) => (
         <mesh key={y} position={[0, y, -0.02]}>
           <boxGeometry args={[1.05, 0.02, 0.28]} />
-          <meshStandardMaterial color="#3a3128" roughness={0.7} />
+          <meshStandardMaterial color="#0d1a2a" roughness={0.7} />
         </mesh>
       ))}
       {spots.map(([x, y], index) => {
@@ -310,6 +400,7 @@ export function Machine({
   canInsert,
   onInsert,
   stock = [],
+  topic = "technology",
 }: {
   phase: Phase;
   vendStarted: number;
@@ -318,7 +409,9 @@ export function Machine({
   canInsert: boolean;
   onInsert: () => void;
   stock?: { shape: string; color: string; claimed: boolean }[];
+  topic?: GiftTopic;
 }) {
+  const theme = THEME_CONFIG[topic] ?? THEME_CONFIG.technology;
   const flap = useRef<Group>(null);
   const coin = useRef<Group>(null);
   const drop = useRef<Group>(null);
@@ -459,7 +552,7 @@ export function Machine({
         <mesh position={[0, 0.12, 0.38]} castShadow>
           <boxGeometry args={[1.05, 1.48, 0.008]} />
           <meshPhysicalMaterial
-            color="#e7f2fb"
+            color="#a0e8ff"
             transmission={0.92}
             thickness={0.04}
             roughness={0.04}
@@ -472,34 +565,34 @@ export function Machine({
         <group ref={spin}>
           <Coil />
         </group>
-        <pointLight ref={bulb} position={[0, 0.35, 0.28]} intensity={2} distance={2.4} color="#ffc58a" />
+        <pointLight ref={bulb} position={[0, 0.35, 0.28]} intensity={2} distance={2.4} color={theme.bulb} />
         <mesh position={[0.66, 0.28, 0.34]}>
           <boxGeometry args={[0.045, 0.16, 0.03]} />
-          <meshStandardMaterial color="#120e0a" roughness={0.5} metalness={0.2} />
+          <meshStandardMaterial color="#040810" roughness={0.5} metalness={0.2} />
         </mesh>
         <mesh position={[0.66, 0.4, 0.35]}>
           <sphereGeometry args={[0.018, 12, 12]} />
-          <meshStandardMaterial ref={lamp} color="#ffe1a3" emissive="#e0b15a" emissiveIntensity={1.2} />
+          <meshStandardMaterial ref={lamp} color={theme.lamp} emissive={theme.lamp} emissiveIntensity={2.5} />
         </mesh>
         <group ref={flap} position={[0, -0.92, 0.28]}>
           <mesh position={[0, -0.07, 0.08]}>
             <boxGeometry args={[0.72, 0.12, 0.08]} />
-            <meshPhysicalMaterial color="#6d522f" metalness={1} roughness={0.32} clearcoat={0.35} />
+            <meshPhysicalMaterial color="#1a2a3a" metalness={1} roughness={0.15} clearcoat={0.35} />
           </mesh>
         </group>
         <mesh position={[0, -1.02, 0.02]}>
           <boxGeometry args={[1.2, 0.08, 0.5]} />
-          <meshPhysicalMaterial color="#5c431f" metalness={1} roughness={0.36} clearcoat={0.3} />
+          <meshPhysicalMaterial color="#0d1a2a" metalness={0.9} roughness={0.2} clearcoat={0.3} />
         </mesh>
       </group>
 
       <mesh position={[0, 0.12, 0.95]} castShadow receiveShadow>
         <boxGeometry args={[0.86, 0.28, 0.56]} />
-        <meshPhysicalMaterial color="#3a3128" metalness={0.55} roughness={0.38} clearcoat={0.2} />
+        <meshPhysicalMaterial color="#0d1118" metalness={0.55} roughness={0.38} clearcoat={0.2} />
       </mesh>
       <mesh position={[0, 0.28, 0.95]} receiveShadow>
         <boxGeometry args={[0.7, 0.03, 0.4]} />
-        <meshPhysicalMaterial color="#e7d7b0" metalness={0.85} roughness={0.22} />
+        <meshPhysicalMaterial color="#c8e0f0" metalness={0.85} roughness={0.22} />
       </mesh>
 
       <group
@@ -515,6 +608,7 @@ export function Machine({
           if (!allowRef.current || phase === "vending" || phase === "reality") return;
           event.stopPropagation();
           held.current = true;
+          playCoinPickup();
           gl.domElement.style.cursor = "grabbing";
           const orbit = controls as { enabled?: boolean } | null;
           if (orbit) orbit.enabled = false;
@@ -538,15 +632,15 @@ export function Machine({
         <group rotation={[0.15, -0.7, 0.08]}>
           <mesh castShadow>
             <cylinderGeometry args={[0.1, 0.1, 0.03, 48]} />
-            <meshPhysicalMaterial color="#ffd98a" emissive="#e0b15a" emissiveIntensity={0.25} metalness={1} roughness={0.18} clearcoat={0.6} />
+            <meshPhysicalMaterial color="#c8e8ff" emissive={theme.coinGlow} emissiveIntensity={0.45} metalness={1} roughness={0.18} clearcoat={0.6} />
           </mesh>
           <mesh rotation={[Math.PI / 2, 0, 0]}>
             <torusGeometry args={[0.1, 0.011, 12, 40]} />
-            <meshPhysicalMaterial color="#fff1c9" metalness={1} roughness={0.15} />
+            <meshPhysicalMaterial color="#e8f4ff" metalness={1} roughness={0.15} />
           </mesh>
           <mesh>
             <cylinderGeometry args={[0.034, 0.034, 0.034, 24]} />
-            <meshPhysicalMaterial color="#8a5a22" metalness={1} roughness={0.3} />
+            <meshPhysicalMaterial color="#2a3a4a" metalness={1} roughness={0.3} />
           </mesh>
         </group>
       </group>

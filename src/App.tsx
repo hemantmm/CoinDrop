@@ -1,7 +1,7 @@
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { playClunk, playStinger, startPlanet, stopPlanet, unlockAudio } from "./audio";
+import { playClunk, playKidsCheer, playStinger, playTopicSelect, startPlanet, stopPlanet, unlockAudio } from "./audio";
 import { loadCabinet, remember, shareUrl, type CabinetItem } from "./cabinet";
 import { generate, isHighRarity, type Product } from "./generate";
 import { displayLine, noteVisit, type Readout } from "./machine/personality";
@@ -14,6 +14,7 @@ import { claimSlot, GIFT_TOPICS, todayStock, type DayStock, type GiftTopic } fro
 import { Cabinet } from "./ui/Cabinet";
 import { Moment, RealityOverlay, Receipt } from "./ui/Receipt";
 import { StockBoard } from "./ui/StockBoard";
+import { KidsCompanion } from "./ui/KidsCompanion";
 
 const VEND_MS = 2200;
 const REALITY_MS = 5000;
@@ -67,9 +68,24 @@ export function App() {
   const handed = useRef<string | null>(null);
   const [stock, setStock] = useState<DayStock>(() => todayStock());
   const [selectedTopic, setSelectedTopic] = useState<GiftTopic>("technology");
+  const [topicBounce, setTopicBounce] = useState(0);
   const [canShare, setCanShare] = useState(false);
   const timers = useRef<number[]>([]);
   const copyTimer = useRef<number | null>(null);
+
+  const chooseTopic = (next: GiftTopic) => {
+    if (selectedTopic === next) return;
+    setSelectedTopic(next);
+    setTopicBounce((c) => c + 1);
+    unlockAudio();
+    playTopicSelect(next);
+  };
+
+  const handleNudgeKids = () => {
+    setTopicBounce((c) => c + 1);
+    unlockAudio();
+    playKidsCheer();
+  };
 
   const clearTimers = () => {
     timers.current.forEach((id) => window.clearTimeout(id));
@@ -277,11 +293,14 @@ export function App() {
         });
 
   return (
-    <div className="shell" data-rarity={product?.rarity ?? "none"} data-phase={phase}>
+    <div className="shell" data-rarity={product?.rarity ?? "none"} data-phase={phase} data-topic={selectedTopic}>
       <main className="main">
         <header className="top">
           <div>
-            <p className="kicker">Standing with the kids</p>
+            <div className="kicker-row">
+              <p className="kicker">Standing with the kids</p>
+              <span className="kids-status-pill">👧 Maya & 👦 Leo at the glass</span>
+            </div>
             <h1>The Impossible Vending Machine</h1>
           </div>
           <p className="kept">
@@ -303,7 +322,7 @@ export function App() {
               gl.domElement.style.touchAction = "none";
             }}
           >
-            <Gallery phase={phase} sky={sky}>
+            <Gallery phase={phase} sky={sky} topic={selectedTopic}>
               <Machine
                 phase={phase}
                 vendStarted={mark}
@@ -311,13 +330,14 @@ export function App() {
                 product={product}
                 canInsert={!busy && Boolean(selectedGift)}
                 onInsert={takeNext}
+                topic={selectedTopic}
                 stock={topicStock.map((slot) => ({
                   shape: slot.shape,
                   color: slot.color,
                   claimed: slot.claimed,
                 }))}
               />
-              <Crowd phase={phase} advance={advance} />
+              <Crowd phase={phase} advance={advance} topicBounce={topicBounce} />
               <WorldCopy
                 phase={phase}
                 product={product}
@@ -330,6 +350,12 @@ export function App() {
               ) : null}
             </Gallery>
           </Canvas>
+          <KidsCompanion
+            topic={selectedTopic}
+            phase={phase}
+            product={product}
+            onNudge={handleNudgeKids}
+          />
           {phase === "reality" && product?.payload.kind === "reality" ? (
             <RealityOverlay spec={product.payload} startedAt={mark} copied={copied} onCopy={() => void copyLink()} />
           ) : null}
@@ -348,7 +374,7 @@ export function App() {
         <div className="controls">
           {!stock.soldOut ? (
             <div className="topic-picker" aria-label="Choose a gift topic">
-              <p className="kicker">Choose what you’re into</p>
+              <p className="kicker">Choose what you’re into · The kids are watching</p>
               <div className="topic-options" role="group" aria-label="Gift topics">
                 {GIFT_TOPICS.map((topic) => {
                   const available = stock.slots.filter((slot) => !slot.claimed && slot.topic === topic.id);
@@ -358,10 +384,14 @@ export function App() {
                       type="button"
                       className={selectedTopic === topic.id ? "topic-option selected" : "topic-option"}
                       aria-pressed={selectedTopic === topic.id}
-                      onClick={() => setSelectedTopic(topic.id)}
+                      onClick={() => chooseTopic(topic.id)}
                     >
-                      <strong>{topic.label}</strong>
-                      <small>{available.length ? `${available.length} gift${available.length === 1 ? "" : "s"} available` : "No gifts left today"}</small>
+                      <div className="topic-header-line">
+                        <span className="topic-icon">{topic.icon}</span>
+                        <strong>{topic.label}</strong>
+                      </div>
+                      <span className="topic-vote">{topic.kidsVote}</span>
+                      <small>{available.length ? `${available.length} gift${available.length === 1 ? "" : "s"} left` : "Sold out today"}</small>
                     </button>
                   );
                 })}

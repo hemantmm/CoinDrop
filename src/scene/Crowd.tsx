@@ -235,14 +235,26 @@ function FamilyBodies({
   atGlass,
   phase,
   coin,
+  topicBounce = 0,
 }: {
   family: Family;
   atGlass: boolean;
   phase: Phase;
   coin: boolean;
+  topicBounce?: number;
 }) {
   const spread = atGlass ? PLAY_SPREAD : QUEUE_SPREAD;
-  const excited = atGlass && (phase === "vending" || phase === "revealed");
+  const [bouncing, setBouncing] = useState(false);
+
+  useEffect(() => {
+    if (topicBounce > 0 && atGlass) {
+      setBouncing(true);
+      const id = window.setTimeout(() => setBouncing(false), 2800);
+      return () => window.clearTimeout(id);
+    }
+  }, [topicBounce, atGlass]);
+
+  const excited = atGlass && (phase === "vending" || phase === "revealed" || bouncing);
   return (
     <>
       <group position={spread.parent}>
@@ -251,7 +263,7 @@ function FamilyBodies({
       {family.kids.map((kid, index) => (
         <group key={`${family.id}-${index}`} position={spread.kids[index]} scale={kid.scale}>
           <KidHop excited={excited} seed={family.id + index}>
-            <KidBody shirt={kid.shirt} skin={kid.skin} hair={kid.hair} shoes={kid.shoes} point={atGlass && kid.point} />
+            <KidBody shirt={kid.shirt} skin={kid.skin} hair={kid.hair} shoes={kid.shoes} point={atGlass && (kid.point || bouncing)} />
           </KidHop>
         </group>
       ))}
@@ -295,11 +307,13 @@ function FamilyGroup({
   slot,
   fresh,
   phase,
+  topicBounce = 0,
 }: {
   family: Family;
   slot: number;
   fresh: boolean;
   phase: Phase;
+  topicBounce?: number;
 }) {
   const rig = useRef<Group>(null);
   const start = fresh ? SPAWN : ANCHORS[slot];
@@ -332,7 +346,7 @@ function FamilyGroup({
 
   return (
     <group ref={rig} position={start}>
-      <FamilyBodies family={family} atGlass={slot === 0} phase={phase} coin={slot === 0} />
+      <FamilyBodies family={family} atGlass={slot === 0} phase={phase} coin={slot === 0} topicBounce={topicBounce} />
     </group>
   );
 }
@@ -400,7 +414,15 @@ function Post({ position }: { position: [number, number, number] }) {
   );
 }
 
-export function Crowd({ phase, advance }: { phase: Phase; advance: number }) {
+export function Crowd({
+  phase,
+  advance,
+  topicBounce = 0,
+}: {
+  phase: Phase;
+  advance: number;
+  topicBounce?: number;
+}) {
   const [line, setLine] = useState<Family[]>(openingLine);
   const [leaving, setLeaving] = useState<Family | null>(null);
   const lineRef = useRef(line);
@@ -440,6 +462,7 @@ export function Crowd({ phase, advance }: { phase: Phase; advance: number }) {
           slot={slot}
           fresh={family.joined > 0 && family.joined === advance}
           phase={phase}
+          topicBounce={slot === 0 ? topicBounce : 0}
         />
       ))}
       {leaving ? <Leaver family={leaving} phase={phase} onDone={() => setLeaving(null)} /> : null}

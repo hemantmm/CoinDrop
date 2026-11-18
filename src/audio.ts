@@ -1,4 +1,5 @@
 import type { Rarity, SoundPayload } from "./generate";
+import type { GiftTopic } from "./stock";
 
 type AudioCtor = typeof AudioContext;
 
@@ -129,6 +130,52 @@ export function playStinger(rarity: Rarity): void {
   if (rarity === "impossible") {
     tone(ctx, now + 0.55, 932.33, 1.1, "sine", 0.05, ctx.destination);
   }
+}
+
+export function playTopicSelect(topic: GiftTopic): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+
+  if (topic === "technology") {
+    tone(ctx, now, 523.25, 0.08, "sine", 0.07, ctx.destination); // C5
+    tone(ctx, now + 0.06, 783.99, 0.1, "triangle", 0.08, ctx.destination); // G5
+    tone(ctx, now + 0.12, 1046.5, 0.16, "sine", 0.07, ctx.destination); // C6
+  } else if (topic === "audio") {
+    tone(ctx, now, 440, 0.12, "triangle", 0.06, ctx.destination); // A4
+    tone(ctx, now + 0.05, 554.37, 0.14, "sine", 0.07, ctx.destination); // C#5
+    tone(ctx, now + 0.10, 659.25, 0.18, "sine", 0.08, ctx.destination); // E5
+    tone(ctx, now + 0.15, 880, 0.22, "sine", 0.06, ctx.destination); // A5
+  } else if (topic === "snacks") {
+    tone(ctx, now, 587.33, 0.08, "sine", 0.07, ctx.destination); // D5
+    tone(ctx, now + 0.06, 739.99, 0.09, "sine", 0.08, ctx.destination); // F#5
+    tone(ctx, now + 0.12, 880, 0.11, "triangle", 0.08, ctx.destination); // A5
+    tone(ctx, now + 0.18, 1174.66, 0.18, "sine", 0.08, ctx.destination); // D6
+  } else if (topic === "style") {
+    tone(ctx, now, 329.63, 0.07, "triangle", 0.08, ctx.destination); // E4
+    tone(ctx, now + 0.05, 493.88, 0.08, "triangle", 0.07, ctx.destination); // B4
+    tone(ctx, now + 0.10, 659.25, 0.14, "sine", 0.09, ctx.destination); // E5
+    tone(ctx, now + 0.16, 987.77, 0.18, "sine", 0.06, ctx.destination); // B5
+  }
+}
+
+export function playKidsCheer(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const notes = [659.25, 783.99, 987.77, 1046.5, 1318.5];
+  notes.forEach((freq, idx) => {
+    tone(ctx, now + idx * 0.04, freq, 0.12, "sine", 0.05, ctx.destination);
+    tone(ctx, now + idx * 0.04 + 0.015, freq * 1.5, 0.08, "triangle", 0.025, ctx.destination);
+  });
+}
+
+export function playCoinPickup(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  tone(ctx, now, 1800, 0.04, "triangle", 0.07, ctx.destination);
+  tone(ctx, now + 0.02, 2400, 0.07, "sine", 0.06, ctx.destination);
 }
 
 export function startPlanet(patch: SoundPayload): void {

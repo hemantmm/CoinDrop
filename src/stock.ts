@@ -16,11 +16,58 @@ type MallPrize = {
 
 export type GiftTopic = "technology" | "audio" | "snacks" | "style";
 
-export const GIFT_TOPICS: { id: GiftTopic; label: string; description: string }[] = [
-  { id: "technology", label: "Technology", description: "Devices and gadgets" },
-  { id: "audio", label: "Audio", description: "Music for the road" },
-  { id: "snacks", label: "Snacks", description: "A little something sweet" },
-  { id: "style", label: "Style", description: "Something to wear" },
+export type GiftTopicInfo = {
+  id: GiftTopic;
+  label: string;
+  description: string;
+  icon: string;
+  vibe: string;
+  kidsSay: string;
+  kidsVote: string;
+  accent: string;
+};
+
+export const GIFT_TOPICS: GiftTopicInfo[] = [
+  {
+    id: "technology",
+    label: "Technology",
+    description: "Devices and gadgets",
+    icon: "⚡",
+    vibe: "Cyber Grid",
+    kidsSay: "Leo: 'Look at the phone, Dad! Can we get it?!' · Maya: 'Check out the tiny camera!'",
+    kidsVote: "👦 Leo's #1 Pick",
+    accent: "#00f5ff",
+  },
+  {
+    id: "audio",
+    label: "Audio",
+    description: "Music for the road",
+    icon: "🎧",
+    vibe: "Synthwave Beat",
+    kidsSay: "Maya: 'The headphones are so pretty!' · Leo: 'We need that speaker for our room!'",
+    kidsVote: "👧 Maya's Favorite",
+    accent: "#bf5af2",
+  },
+  {
+    id: "snacks",
+    label: "Snacks",
+    description: "A little something sweet",
+    icon: "🍫",
+    vibe: "Golden Candy Shop",
+    kidsSay: "Maya: 'CHOCOLATE! Please dad, the gold bar!!' · Leo: 'Look at the gummy bears!!'",
+    kidsVote: "👧 Maya's Cravings",
+    accent: "#ff9e3b",
+  },
+  {
+    id: "style",
+    label: "Style",
+    description: "Something to wear",
+    icon: "👟",
+    vibe: "Streetwear Neon",
+    kidsSay: "Leo: 'Those sneakers are so fire!!' · Maya: 'The cap with the star looks so cute!'",
+    kidsVote: "👦 Leo's Street Vibe",
+    accent: "#00ff88",
+  },
 ];
 
 const PRIZES: MallPrize[] = [
