@@ -63,13 +63,13 @@ export function Gallery({
           enablePan={false}
           enableDamping
           dampingFactor={0.08}
-          target={[0, 0.95, 0]}
-          minDistance={2.6}
-          maxDistance={9}
-          minPolarAngle={0.5}
-          maxPolarAngle={1.45}
-          minAzimuthAngle={-1.45}
-          maxAzimuthAngle={1.45}
+          target={[0, 1.08, 0.25]}
+          minDistance={1.65}
+          maxDistance={6.5}
+          minPolarAngle={0.85}
+          maxPolarAngle={1.28}
+          minAzimuthAngle={-0.95}
+          maxAzimuthAngle={0.95}
         />
       ) : null}
       {phase !== "reality" ? <fog attach="fog" args={["#14110e", 9, 16]} /> : null}

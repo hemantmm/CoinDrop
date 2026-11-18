@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { Group } from "three";
 import * as THREE from "three";
@@ -18,7 +18,21 @@ type Figure = {
 
 type Look = { coat: string; skin: string; hair: string };
 
-type Queued = Look & { id: number; bag: boolean; joined: number };
+type KidLook = {
+  shirt: string;
+  skin: string;
+  hair: string;
+  shoes: string;
+  scale: number;
+  point: boolean;
+};
+
+type Family = Look & {
+  id: number;
+  bag: boolean;
+  joined: number;
+  kids: [KidLook, KidLook];
+};
 
 const LOOKS: Look[] = [
   { coat: "#31425f", skin: "#e4b48f", hair: "#2a211c" },
@@ -29,15 +43,33 @@ const LOOKS: Look[] = [
   { coat: "#243044", skin: "#6b3e26", hair: "#2c241e" },
 ];
 
-const SLOTS: [number, number, number][] = [
+const ANCHORS: [number, number, number][] = [
+  [0, 0, 1.42],
   [2.15, 0, 2.05],
   [2.75, 0, 2.05],
-  [3.35, 0, 2.05],
-  [3.35, 0, 1.42],
+  [3.35, 0, 1.45],
 ];
 
+const PLAY_SPREAD = {
+  parent: [0.08, 0, -0.08] as [number, number, number],
+  kids: [
+    [-0.62, 0, 0.42],
+    [0.18, 0, 0.5],
+  ] as [number, number, number][],
+};
+
+const QUEUE_SPREAD = {
+  parent: [0, 0, 0] as [number, number, number],
+  kids: [
+    [-0.26, 0, -0.2],
+    [0.26, 0, -0.16],
+  ] as [number, number, number][],
+};
+
+const SHIRTS = ["#f2c14e", "#e25b4a", "#3d9b8f", "#7aa2d6"];
+
 const SPAWN: [number, number, number] = [3.95, 0, 0.72];
-const EXIT: [number, number, number] = [0.2, 0, 3.75];
+const EXIT: [number, number, number] = [-2.8, 0, 2.55];
 
 const WATCHERS: Figure[] = [
   { position: [-1.72, 0, 1.55], coat: "#3a3558", skin: "#e4b48f", hair: "#1c1614", bag: true, coin: false, role: "watch" },
@@ -54,15 +86,26 @@ const POSTS: [number, number, number][] = [
 
 let nextPersonId = 1;
 
-function makePerson(bag: boolean, joined: number): Queued {
+function makeFamily(joined: number): Family {
   const look = LOOKS[nextPersonId % LOOKS.length] ?? LOOKS[0];
-  const person = { id: nextPersonId, ...look, bag, joined };
+  const shirtA = SHIRTS[nextPersonId % SHIRTS.length] ?? SHIRTS[0];
+  const shirtB = SHIRTS[(nextPersonId + 2) % SHIRTS.length] ?? SHIRTS[1];
+  const family: Family = {
+    id: nextPersonId,
+    ...look,
+    bag: nextPersonId % 2 === 0,
+    joined,
+    kids: [
+      { shirt: shirtA, skin: look.skin, hair: look.hair, shoes: shirtB, scale: 0.78, point: true },
+      { shirt: shirtB, skin: look.skin, hair: "#1a1412", shoes: shirtA, scale: 0.66, point: false },
+    ],
+  };
   nextPersonId += 1;
-  return person;
+  return family;
 }
 
-function openingLine(): Queued[] {
-  return [false, true, false, true].map((bag) => makePerson(bag, 0));
+function openingLine(): Family[] {
+  return [0, 1, 2, 3].map(() => makeFamily(0));
 }
 
 function yawTowardMachine(position: [number, number, number]) {
@@ -130,6 +173,92 @@ function Body({
   );
 }
 
+function KidBody({ shirt, skin, hair, shoes, point }: Omit<KidLook, "scale">) {
+  return (
+    <group>
+      <mesh position={[-0.08, 0.28, 0]} castShadow>
+        <capsuleGeometry args={[0.055, 0.22, 3, 6]} />
+        <meshStandardMaterial color="#1c1916" roughness={0.8} />
+      </mesh>
+      <mesh position={[0.08, 0.28, 0]} castShadow>
+        <capsuleGeometry args={[0.055, 0.22, 3, 6]} />
+        <meshStandardMaterial color="#1c1916" roughness={0.8} />
+      </mesh>
+      <mesh position={[-0.08, 0.1, 0.04]}>
+        <boxGeometry args={[0.09, 0.06, 0.14]} />
+        <meshStandardMaterial color={shoes} roughness={0.55} />
+      </mesh>
+      <mesh position={[0.08, 0.1, 0.04]}>
+        <boxGeometry args={[0.09, 0.06, 0.14]} />
+        <meshStandardMaterial color={shoes} roughness={0.55} />
+      </mesh>
+      <mesh position={[0, 0.72, 0]} castShadow>
+        <capsuleGeometry args={[0.16, 0.28, 4, 8]} />
+        <meshStandardMaterial color={shirt} roughness={0.62} />
+      </mesh>
+      <mesh position={[-0.2, 0.7, 0.02]} rotation={[0.2, 0, 0.7]}>
+        <capsuleGeometry args={[0.04, 0.22, 3, 6]} />
+        <meshStandardMaterial color={shirt} roughness={0.62} />
+      </mesh>
+      <mesh position={[0.2, 0.78, 0.06]} rotation={point ? [-1.15, 0.2, -0.35] : [0.35, 0, -0.45]}>
+        <capsuleGeometry args={[0.04, 0.24, 3, 6]} />
+        <meshStandardMaterial color={shirt} roughness={0.62} />
+      </mesh>
+      <mesh position={[0, 1.08, 0]} castShadow>
+        <sphereGeometry args={[0.145, 16, 12]} />
+        <meshStandardMaterial color={skin} roughness={0.55} />
+      </mesh>
+      <mesh position={[0, 1.16, -0.01]}>
+        <sphereGeometry args={[0.148, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
+        <meshStandardMaterial color={hair} roughness={0.72} />
+      </mesh>
+    </group>
+  );
+}
+
+function KidHop({ excited, seed, children }: { excited: boolean; seed: number; children: ReactNode }) {
+  const rig = useRef<Group>(null);
+
+  useFrame(({ clock }) => {
+    const group = rig.current;
+    if (!group) return;
+    const t = clock.elapsedTime + seed;
+    group.position.y = Math.abs(Math.sin(t * (excited ? 7 : 2.4))) * (excited ? 0.045 : 0.014);
+    group.rotation.x = excited ? 0.22 : Math.sin(t * 0.7) * 0.04;
+  });
+
+  return <group ref={rig}>{children}</group>;
+}
+
+function FamilyBodies({
+  family,
+  atGlass,
+  phase,
+  coin,
+}: {
+  family: Family;
+  atGlass: boolean;
+  phase: Phase;
+  coin: boolean;
+}) {
+  const spread = atGlass ? PLAY_SPREAD : QUEUE_SPREAD;
+  const excited = atGlass && (phase === "vending" || phase === "revealed");
+  return (
+    <>
+      <group position={spread.parent}>
+        <Body coat={family.coat} skin={family.skin} hair={family.hair} bag={family.bag} coin={coin} />
+      </group>
+      {family.kids.map((kid, index) => (
+        <group key={`${family.id}-${index}`} position={spread.kids[index]} scale={kid.scale}>
+          <KidHop excited={excited} seed={family.id + index}>
+            <KidBody shirt={kid.shirt} skin={kid.skin} hair={kid.hair} shoes={kid.shoes} point={atGlass && kid.point} />
+          </KidHop>
+        </group>
+      ))}
+    </>
+  );
+}
+
 function Person({ figure, index, phase }: { figure: Figure; index: number; phase: Phase }) {
   const rig = useRef<Group>(null);
   const watching = phase === "vending" || phase === "revealed";
@@ -155,57 +284,86 @@ function placeAt(target: Group, point: THREE.Vector3, bob: number, yaw: number) 
   target.rotation.y = yaw;
 }
 
-function QueuedPerson({ person, slot, fresh }: { person: Queued; slot: number; fresh: boolean }) {
+function muteRaycast(group: Group | null) {
+  group?.traverse((obj) => {
+    obj.raycast = () => null;
+  });
+}
+
+function FamilyGroup({
+  family,
+  slot,
+  fresh,
+  phase,
+}: {
+  family: Family;
+  slot: number;
+  fresh: boolean;
+  phase: Phase;
+}) {
   const rig = useRef<Group>(null);
-  const here = useRef(new THREE.Vector3(...(fresh ? SPAWN : SLOTS[slot])));
-  const goal = useRef(new THREE.Vector3(...SLOTS[slot]));
-  const face = useRef(yawTowardMachine(SLOTS[slot]));
+  const start = fresh ? SPAWN : ANCHORS[slot];
+  const here = useRef(new THREE.Vector3(...start));
+  const goal = useRef(new THREE.Vector3(...ANCHORS[slot]));
+  const face = useRef(yawTowardMachine(ANCHORS[slot]));
 
   useEffect(() => {
-    goal.current.set(...SLOTS[slot]);
+    goal.current.set(...ANCHORS[slot]);
   }, [slot]);
+
+  useLayoutEffect(() => {
+    muteRaycast(rig.current);
+  }, []);
 
   useFrame(({ clock }, delta) => {
     const group = rig.current;
     if (!group) return;
     const dx = goal.current.x - here.current.x;
     const dz = goal.current.z - here.current.z;
-    const moving = dx * dx + dz * dz > 0.0004;
-    here.current.lerp(goal.current, 1 - Math.exp(-delta * 2.4));
+    const moving = dx * dx + dz * dz > 0.0008;
+    here.current.lerp(goal.current, 1 - Math.exp(-delta * 2.1));
     if (moving) face.current = Math.atan2(dx, dz);
-    else face.current = yawTowardMachine(SLOTS[slot]);
-    const bob = Math.sin(clock.elapsedTime * 1.35 + person.id) * 0.012;
+    else face.current = yawTowardMachine([here.current.x, 0, here.current.z]);
+    const bob = moving
+      ? Math.abs(Math.sin(clock.elapsedTime * 8 + family.id)) * 0.035
+      : Math.sin(clock.elapsedTime * 1.3 + family.id) * 0.01;
     placeAt(group, here.current, bob, face.current);
   });
 
   return (
-    <group ref={rig} position={fresh ? SPAWN : SLOTS[slot]} raycast={() => null}>
-      <Body coat={person.coat} skin={person.skin} hair={person.hair} bag={person.bag} coin={slot === 0} />
+    <group ref={rig} position={start}>
+      <FamilyBodies family={family} atGlass={slot === 0} phase={phase} coin={slot === 0} />
     </group>
   );
 }
 
-function Leaver({ person, onDone }: { person: Queued; onDone: (id: number) => void }) {
+function Leaver({ family, phase, onDone }: { family: Family; phase: Phase; onDone: (id: number) => void }) {
   const rig = useRef<Group>(null);
-  const here = useRef(new THREE.Vector3(...SLOTS[0]));
+  const here = useRef(new THREE.Vector3(...ANCHORS[0]));
   const goal = useRef(new THREE.Vector3(...EXIT));
   const finished = useRef(false);
 
-  useFrame((_, delta) => {
+  useLayoutEffect(() => {
+    muteRaycast(rig.current);
+  }, []);
+
+  useFrame(({ clock }, delta) => {
     const group = rig.current;
     if (!group || finished.current) return;
-    here.current.lerp(goal.current, 1 - Math.exp(-delta * 1.6));
-    const yaw = Math.atan2(goal.current.x - SLOTS[0][0], goal.current.z - SLOTS[0][2]);
-    placeAt(group, here.current, 0, yaw);
-    if (here.current.distanceTo(goal.current) < 0.08) {
+    const dx = goal.current.x - here.current.x;
+    const dz = goal.current.z - here.current.z;
+    here.current.lerp(goal.current, 1 - Math.exp(-delta * 1.5));
+    const bob = Math.abs(Math.sin(clock.elapsedTime * 8 + family.id)) * 0.03;
+    placeAt(group, here.current, bob, Math.atan2(dx, dz));
+    if (here.current.distanceTo(goal.current) < 0.12) {
       finished.current = true;
-      onDone(person.id);
+      onDone(family.id);
     }
   });
 
   return (
-    <group ref={rig} position={SLOTS[0]} raycast={() => null}>
-      <Body coat={person.coat} skin={person.skin} hair={person.hair} bag={person.bag} coin={false} />
+    <group ref={rig} position={ANCHORS[0]}>
+      <FamilyBodies family={family} atGlass phase={phase} coin={false} />
     </group>
   );
 }
@@ -243,8 +401,8 @@ function Post({ position }: { position: [number, number, number] }) {
 }
 
 export function Crowd({ phase, advance }: { phase: Phase; advance: number }) {
-  const [line, setLine] = useState<Queued[]>(openingLine);
-  const [leaving, setLeaving] = useState<Queued | null>(null);
+  const [line, setLine] = useState<Family[]>(openingLine);
+  const [leaving, setLeaving] = useState<Family | null>(null);
   const lineRef = useRef(line);
   const seen = useRef(advance);
 
@@ -253,7 +411,7 @@ export function Crowd({ phase, advance }: { phase: Phase; advance: number }) {
     seen.current = advance;
     const front = lineRef.current[0];
     if (!front) return;
-    const next = [...lineRef.current.slice(1), makePerson(advance % 2 === 0, advance)];
+    const next = [...lineRef.current.slice(1), makeFamily(advance)];
     lineRef.current = next;
     setLine(next);
     setLeaving(front);
@@ -275,10 +433,16 @@ export function Crowd({ phase, advance }: { phase: Phase; advance: number }) {
       ))}
       <Rope from={POSTS[0]} to={POSTS[1]} />
       <Rope from={POSTS[1]} to={POSTS[2]} />
-      {line.map((person, slot) => (
-        <QueuedPerson key={person.id} person={person} slot={slot} fresh={person.joined > 0 && person.joined === advance} />
+      {line.map((family, slot) => (
+        <FamilyGroup
+          key={family.id}
+          family={family}
+          slot={slot}
+          fresh={family.joined > 0 && family.joined === advance}
+          phase={phase}
+        />
       ))}
-      {leaving ? <Leaver person={leaving} onDone={() => setLeaving(null)} /> : null}
+      {leaving ? <Leaver family={leaving} phase={phase} onDone={() => setLeaving(null)} /> : null}
       {WATCHERS.map((figure, index) => (
         <Person key={figure.position.join(",")} figure={figure} index={index} phase={phase} />
       ))}

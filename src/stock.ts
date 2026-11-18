@@ -14,7 +14,7 @@ type MallPrize = {
 };
 
 const PRIZES: MallPrize[] = [
-  { name: "iPhone", kind: "Phone", detail: "A sealed phone. Only the person at the front can take it.", rarity: "legendary", color: "#f5f5f7", shape: "phone" },
+  { name: "iPhone", kind: "Phone", detail: "A sealed phone. The kids are looking at it. Only your coin can take it.", rarity: "legendary", color: "#f5f5f7", shape: "phone" },
   { name: "MacBook", kind: "Laptop", detail: "A closed laptop, still in the sleeve.", rarity: "legendary", color: "#d7d7dc", shape: "laptop" },
   { name: "Watch", kind: "Watch", detail: "A steel watch on a new strap.", rarity: "rare", color: "#d9dde3", shape: "watch" },
   { name: "Chocolate", kind: "Sweet", detail: "A bar in gold foil.", rarity: "common", color: "#6b3e22", shape: "chocolate" },

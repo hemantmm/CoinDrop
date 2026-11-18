@@ -63,8 +63,8 @@ export function App() {
   );
   const [copied, setCopied] = useState(false);
   const [listening, setListening] = useState(false);
-  const [askNext, setAskNext] = useState(false);
   const [advance, setAdvance] = useState(0);
+  const handed = useRef<string | null>(null);
   const [stock, setStock] = useState<DayStock>(() => todayStock());
   const [canShare, setCanShare] = useState(false);
   const timers = useRef<number[]>([]);
@@ -89,13 +89,18 @@ export function App() {
     copyTimer.current = window.setTimeout(() => setCopied(false), 1600);
   };
 
+  const handOff = (seed: string) => {
+    if (handed.current === seed) return;
+    handed.current = seed;
+    setAdvance((count) => count + 1);
+  };
+
   const show = (next: Product, mode: "vend" | "instant") => {
     clearTimers();
     stopPlanet();
     setListening(false);
     setCopied(false);
     setMoment(false);
-    setAskNext(false);
     setProduct(next);
     const url = new URL(window.location.href);
     url.searchParams.set("seed", next.seed);
@@ -113,11 +118,11 @@ export function App() {
         setMoment(true);
         later(MOMENT_MS, () => {
           setMoment(false);
-          setAskNext(true);
+          handOff(next.seed);
         });
         return;
       }
-      setAskNext(true);
+      handOff(next.seed);
     };
 
     if (mode === "vend") {
@@ -133,7 +138,7 @@ export function App() {
           setMark(performance.now());
           later(REALITY_MS, () => {
             setPhase("revealed");
-            setAskNext(true);
+            handOff(next.seed);
           });
           return;
         }
@@ -247,9 +252,9 @@ export function App() {
       }
     : phase === "idle" && stock.next
       ? {
-          label: "For you",
+          label: "Your coin",
           text: stock.next.product.title,
-          detail: "Only the person at the front is offered this one.",
+          detail: "This family is at the glass. When their turn ends, they leave and the next family steps up.",
           tone: "warn",
         }
       : displayLine({
@@ -270,7 +275,7 @@ export function App() {
       <main className="main">
         <header className="top">
           <div>
-            <p className="kicker">Gallery machine</p>
+            <p className="kicker">Standing with the kids</p>
             <h1>The Impossible Vending Machine</h1>
           </div>
           <p className="kept">
@@ -281,14 +286,14 @@ export function App() {
           <Canvas
             shadows
             dpr={[1, 1.75]}
-            camera={{ position: [2.55, 1.72, 4.35], fov: 42 }}
+            camera={{ position: [0.1, 1.58, 2.42], fov: 48 }}
             gl={{
               antialias: true,
               toneMapping: THREE.ACESFilmicToneMapping,
               toneMappingExposure: 1.05,
             }}
             onCreated={({ camera, gl }) => {
-              camera.lookAt(0, 0.95, 0);
+              camera.lookAt(0, 1.08, 0.25);
               gl.domElement.style.touchAction = "none";
             }}
           >
@@ -323,25 +328,18 @@ export function App() {
             <RealityOverlay spec={product.payload} startedAt={mark} copied={copied} onCopy={() => void copyLink()} />
           ) : null}
           {moment && product ? (
-            <Moment product={product} copied={copied} onCopy={() => void copyLink()} onDismiss={() => setMoment(false)} />
+            <Moment
+              product={product}
+              copied={copied}
+              onCopy={() => void copyLink()}
+              onDismiss={() => {
+                setMoment(false);
+                handOff(product.seed);
+              }}
+            />
           ) : null}
         </div>
         <div className="controls">
-          {askNext ? (
-            <div className="next-ask" role="dialog" aria-labelledby="next-ask-title">
-              <p className="kicker">Turn over</p>
-              <h2 id="next-ask-title">Call the next person?</h2>
-              <p>The one at the rope has a coin ready.</p>
-              <div className="next-actions">
-                <button type="button" onClick={() => { setAskNext(false); setAdvance((count) => count + 1); }}>
-                  Yes, next
-                </button>
-                <button type="button" className="quiet" onClick={() => setAskNext(false)}>
-                  Not yet
-                </button>
-              </div>
-            </div>
-          ) : null}
           {closed ? (
             <div className="next-ask closed-note" role="status">
               <p className="kicker">Sold out</p>
@@ -357,13 +355,13 @@ export function App() {
                 : phase === "reality"
                   ? "Five seconds"
                   : product
-                    ? "Insert another coin"
-                    : "Insert coin"}
+                    ? "Another one for them"
+                    : "Drop the coin for them"}
           </button>
           <p>
             {stock.soldOut
               ? "The case is empty until tomorrow."
-              : `${stock.remaining} prizes are still inside. Insert a coin to take the next one.`}
+              : `${stock.remaining} prizes are still in the case. When this family's turn ends, they walk off and the next parent and kids come up.`}
           </p>
         </div>
       </main>
