@@ -159,8 +159,10 @@ export function App() {
   };
 
   const takeNext = () => {
-    const slot = stock.slots.find((item) => !item.claimed && item.topic === selectedTopic);
-    if (busy || !slot) return;
+    const available = stock.slots.filter((item) => !item.claimed && item.topic === selectedTopic);
+    if (busy || available.length === 0) return;
+    const slot = available[Math.floor(Math.random() * available.length)];
+    if (!slot) return;
     claimSlot(slot.index);
     setStock(todayStock());
     setCabinet(remember(slot.product));
@@ -241,7 +243,9 @@ export function App() {
 
   const sky = product?.payload.kind === "reality" ? product.payload.sky : "#14110e";
   const busy = phase === "vending" || phase === "reality" || moment;
-  const selectedGift = stock.slots.find((item) => !item.claimed && item.topic === selectedTopic) ?? null;
+  const topicStock = stock.slots.filter((item) => item.topic === selectedTopic);
+  const availableGifts = topicStock.filter((item) => !item.claimed);
+  const selectedGift = availableGifts[0] ?? null;
   const showPlinth = phase === "revealed" && !moment;
   const impossibleKept = cabinet.some((item) => item.rarity === "impossible");
   const closed = !selectedGift && phase !== "vending" && phase !== "reality";
@@ -255,8 +259,8 @@ export function App() {
     : phase === "idle" && selectedGift
       ? {
           label: "Your pick",
-          text: selectedGift.product.title,
-          detail: `You chose ${GIFT_TOPICS.find((topic) => topic.id === selectedTopic)?.label}. Put in a coin to claim this gift.`,
+          text: "A surprise is waiting",
+          detail: `You chose ${GIFT_TOPICS.find((topic) => topic.id === selectedTopic)?.label}. Insert a coin and the machine will pick one of the ${availableGifts.length} gifts in this topic at random.`,
           tone: "warn",
         }
       : displayLine({
@@ -307,7 +311,7 @@ export function App() {
                 product={product}
                 canInsert={!busy && Boolean(selectedGift)}
                 onInsert={takeNext}
-                stock={stock.slots.map((slot) => ({
+                stock={topicStock.map((slot) => ({
                   shape: slot.shape,
                   color: slot.color,
                   claimed: slot.claimed,
@@ -357,7 +361,7 @@ export function App() {
                       onClick={() => setSelectedTopic(topic.id)}
                     >
                       <strong>{topic.label}</strong>
-                      <small>{available.length ? `${available.length} gift${available.length === 1 ? "" : "s"} · ${available[0]?.product.title}` : "No gifts left today"}</small>
+                      <small>{available.length ? `${available.length} gift${available.length === 1 ? "" : "s"} available` : "No gifts left today"}</small>
                     </button>
                   );
                 })}
@@ -392,7 +396,7 @@ export function App() {
         </div>
       </main>
       <aside className="side">
-        <StockBoard slots={stock.slots} />
+        <StockBoard slots={topicStock} />
         <Receipt
           product={phase === "idle" || phase === "vending" ? null : product}
           copied={copied}
