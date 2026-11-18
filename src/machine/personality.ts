@@ -128,6 +128,9 @@ function aboutProduct(type: ProductType, rarity: Rarity | null, title: string): 
   if (type === "creature") {
     return { label: "Alive", text: title, detail: `It is awake on the plinth. ${weight}`, tone };
   }
+  if (type === "prize") {
+    return { label: "Won", text: title, detail: "It is out of the case. The next prize moves up.", tone };
+  }
   return { label: "Five seconds", text: title, detail: `Stay until the room returns. ${weight}`, tone };
 }
 

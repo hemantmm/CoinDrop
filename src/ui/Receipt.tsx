@@ -128,7 +128,7 @@ export function Receipt({
         <p className="kicker">The machine</p>
         <h2>Nothing has been dispensed.</h2>
         <p className="lede">
-          The cabinet is full of objects that do not exist yet. The coin decides which one becomes true.
+          The case holds an iPhone, a MacBook, a watch, chocolate, and the rest of today's prizes. The person at the front is offered the next one. Everyone else can see what is still left.
         </p>
         <ul className="odds">
           {(["common", "uncommon", "rare", "legendary", "impossible"] as const).map((rarity) => (

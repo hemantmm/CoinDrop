@@ -106,7 +106,7 @@ h1 { font-weight: 560; font-size: clamp(28px, 3vw, 44px); letter-spacing: -0.03e
   gap: 18px;
   min-height: 100vh;
 }
-.receipt, .cabinet {
+.receipt, .cabinet, .stock {
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 18px;
@@ -185,6 +185,26 @@ h1 { font-weight: 560; font-size: clamp(28px, 3vw, 44px); letter-spacing: -0.03e
 .ticket.active, .ticket:hover { border-color: var(--line); background: rgba(255, 255, 255, 0.03); }
 .ticket strong { display: block; font-weight: 560; font-size: 15px; letter-spacing: -0.02em; }
 .ticket small { color: var(--muted); }
+.stock ol { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.stock li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.stock strong { display: block; font-weight: 560; font-size: 15px; letter-spacing: -0.02em; }
+.stock small {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.stock li.taken { opacity: 0.4; }
+.stock li.taken strong { text-decoration: line-through; }
+.stock li.next strong { color: var(--brass); }
+.closed-note h2 { font-size: 28px; }
 .dot { width: 8px; height: 8px; border-radius: 99px; flex: none; }
 .empty-copy { color: var(--muted); margin-top: 8px; }
 

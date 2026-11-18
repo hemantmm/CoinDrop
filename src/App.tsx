@@ -4,14 +4,16 @@ import * as THREE from "three";
 import { playClunk, playStinger, startPlanet, stopPlanet, unlockAudio } from "./audio";
 import { loadCabinet, remember, shareUrl, type CabinetItem } from "./cabinet";
 import { generate, isHighRarity, type Product } from "./generate";
-import { displayLine, noteVisit } from "./machine/personality";
-import { isSeed, makeSeed } from "./rng";
+import { displayLine, noteVisit, type Readout } from "./machine/personality";
+import { isSeed } from "./rng";
 import { Crowd } from "./scene/Crowd";
 import { Gallery, Machine, type Phase } from "./scene/Machine";
 import { WorldCopy } from "./scene/Labels";
 import { Reality } from "./scene/Reality";
+import { claimSlot, todayStock, type DayStock } from "./stock";
 import { Cabinet } from "./ui/Cabinet";
 import { Moment, RealityOverlay, Receipt } from "./ui/Receipt";
+import { StockBoard } from "./ui/StockBoard";
 
 const VEND_MS = 2200;
 const REALITY_MS = 5000;
@@ -63,6 +65,7 @@ export function App() {
   const [listening, setListening] = useState(false);
   const [askNext, setAskNext] = useState(false);
   const [advance, setAdvance] = useState(0);
+  const [stock, setStock] = useState<DayStock>(() => todayStock());
   const [canShare, setCanShare] = useState(false);
   const timers = useRef<number[]>([]);
   const copyTimer = useRef<number | null>(null);
@@ -149,6 +152,15 @@ export function App() {
     finishReveal();
   };
 
+  const takeNext = () => {
+    if (busy || stock.soldOut || !stock.next) return;
+    const slot = stock.next;
+    claimSlot(slot.index);
+    setStock(todayStock());
+    setCabinet(remember(slot.product));
+    show(slot.product, "vend");
+  };
+
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(id);
@@ -225,18 +237,33 @@ export function App() {
   const busy = phase === "vending" || phase === "reality" || moment;
   const showPlinth = phase === "revealed" && !moment;
   const impossibleKept = cabinet.some((item) => item.rarity === "impossible");
-  const readout = displayLine({
-    phase,
-    rarity: product?.rarity ?? null,
-    type: product?.type ?? null,
-    title: product?.title ?? null,
-    seed: product?.seed ?? null,
-    visits,
-    discoveries: cabinet.length,
-    impossibleKept,
-    vendStarted: mark,
-    now,
-  });
+  const closed = stock.soldOut && phase !== "vending" && phase !== "reality";
+  const readout: Readout = closed
+    ? {
+        label: "Closed",
+        text: "Come back tomorrow.",
+        detail: "Today's prizes are gone. Tomorrow holds more exciting ones.",
+        tone: "warn",
+      }
+    : phase === "idle" && stock.next
+      ? {
+          label: "For you",
+          text: stock.next.product.title,
+          detail: "Only the person at the front is offered this one.",
+          tone: "warn",
+        }
+      : displayLine({
+          phase,
+          rarity: product?.rarity ?? null,
+          type: product?.type ?? null,
+          title: product?.title ?? null,
+          seed: product?.seed ?? null,
+          visits,
+          discoveries: cabinet.length,
+          impossibleKept,
+          vendStarted: mark,
+          now,
+        });
 
   return (
     <div className="shell" data-rarity={product?.rarity ?? "none"} data-phase={phase}>
@@ -271,8 +298,13 @@ export function App() {
                 vendStarted={mark}
                 vendMs={VEND_MS}
                 product={product}
-                canInsert={!busy}
-                onInsert={() => show(generate(makeSeed()), "vend")}
+                canInsert={!busy && !stock.soldOut}
+                onInsert={takeNext}
+                stock={stock.slots.map((slot) => ({
+                  shape: slot.shape,
+                  color: slot.color,
+                  claimed: slot.claimed,
+                }))}
               />
               <Crowd phase={phase} advance={advance} />
               <WorldCopy
@@ -310,13 +342,33 @@ export function App() {
               </div>
             </div>
           ) : null}
-          <button type="button" className="coin" disabled={busy} onClick={() => show(generate(makeSeed()), "vend")}>
-            {phase === "vending" ? "Dispensing" : phase === "reality" ? "Five seconds" : product ? "Insert another coin" : "Insert coin"}
+          {closed ? (
+            <div className="next-ask closed-note" role="status">
+              <p className="kicker">Sold out</p>
+              <h2>Come back tomorrow</h2>
+              <p>Today's prizes are finished. Return tomorrow to continue, and for more exciting prizes.</p>
+            </div>
+          ) : null}
+          <button type="button" className="coin" disabled={busy || stock.soldOut} onClick={takeNext}>
+            {stock.soldOut
+              ? "Come back tomorrow"
+              : phase === "vending"
+                ? "Dispensing"
+                : phase === "reality"
+                  ? "Five seconds"
+                  : product
+                    ? "Insert another coin"
+                    : "Insert coin"}
           </button>
-          <p>A queue is waiting. Drag around the floor to see them, or drag the coin into the slot.</p>
+          <p>
+            {stock.soldOut
+              ? "The case is empty until tomorrow."
+              : `${stock.remaining} prizes are still inside. Insert a coin to take the next one.`}
+          </p>
         </div>
       </main>
       <aside className="side">
+        <StockBoard slots={stock.slots} />
         <Receipt
           product={phase === "idle" || phase === "vending" ? null : product}
           copied={copied}

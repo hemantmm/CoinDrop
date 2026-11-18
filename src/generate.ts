@@ -10,14 +10,15 @@ import {
 import { hashSerial, makeRng, type Rng } from "./rng";
 
 export type Rarity = "common" | "uncommon" | "rare" | "legendary" | "impossible";
-export type ProductType = "memory" | "sound" | "creature" | "letter" | "reality";
+export type ProductType = "memory" | "sound" | "creature" | "letter" | "reality" | "prize";
 
 export type MemoryPayload = ReturnType<typeof writeMemory>;
 export type LetterPayload = ReturnType<typeof writeLetter>;
 export type CreaturePayload = ReturnType<typeof writeCreature>;
 export type SoundPayload = ReturnType<typeof writeSound>;
 export type RealityPayload = ReturnType<typeof writeReality>;
-export type Payload = MemoryPayload | LetterPayload | CreaturePayload | SoundPayload | RealityPayload;
+export type PrizePayload = { kind: "prize"; name: string; detail: string };
+export type Payload = MemoryPayload | LetterPayload | CreaturePayload | SoundPayload | RealityPayload | PrizePayload;
 
 export type Product = {
   seed: string;
@@ -60,6 +61,7 @@ export const TYPE_LABEL: Record<ProductType, string> = {
   creature: "Creature",
   letter: "Letter",
   reality: "Alternate reality",
+  prize: "Mall prize",
 };
 
 function rollRarity(rng: Rng): Rarity {
@@ -72,7 +74,7 @@ function rollRarity(rng: Rng): Rarity {
 }
 
 function rollTraits(rng: Rng, type: ProductType, rarity: Rarity): string[] {
-  const pool = [...TRAIT_POOL[type]];
+  const pool = [...(TRAIT_POOL[type as keyof typeof TRAIT_POOL] ?? [])];
   const count = 2 + rng.int(3);
   const traits: string[] = [];
   for (let i = 0; i < count && pool.length > 0; i += 1) {
@@ -102,6 +104,8 @@ function titleFor(type: ProductType, payload: Payload): string {
       return payload.kind === "letter" ? `Letter from ${payload.year}` : "A letter";
     case "reality":
       return "Five seconds of another sky";
+    case "prize":
+      return payload.kind === "prize" ? payload.name : "A prize";
   }
 }
 
@@ -117,6 +121,8 @@ function lineFor(type: ProductType, payload: Payload, traits: string[]): string 
       return payload.body;
     case "reality":
       return payload.rule;
+    case "prize":
+      return payload.detail;
     default:
       return type;
   }
@@ -139,6 +145,8 @@ export function generate(seed: string): Product {
         return writeSound(rng);
       case "reality":
         return writeReality(rng);
+      case "prize":
+        return { kind: "prize" as const, name: "Prize", detail: "A prize from the case." };
     }
   })();
 

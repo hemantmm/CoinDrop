@@ -75,6 +75,14 @@ function cardTexture(product: Product) {
     pen.fillStyle = ink;
     pen.font = "600 84px Fraunces, Palatino, serif";
     pen.fillText(product.title, 512, 250);
+  } else if (payload.kind === "prize") {
+    pen.fillText(product.traits[0]?.toUpperCase() ?? "PRIZE", 64, 70);
+    pen.fillStyle = ink;
+    pen.font = "600 78px Fraunces, Palatino, serif";
+    const next = wrap(pen, payload.name, 64, 140, 880, 86);
+    pen.fillStyle = muted;
+    pen.font = "400 32px Fraunces, Palatino, serif";
+    wrap(pen, payload.detail, 64, next + 16, 880, 42);
   }
 
   const texture = new THREE.CanvasTexture(canvas);

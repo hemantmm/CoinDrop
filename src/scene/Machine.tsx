@@ -194,35 +194,115 @@ function Coil() {
   );
 }
 
-function Shelves() {
-  const columns = [-0.42, -0.24, 0.24, 0.42];
-  const rows = [0.42, -0.18];
+function PrizeShape({ shape, color }: { shape: string; color: string }) {
+  if (shape === "phone") {
+    return (
+      <group>
+        <mesh castShadow>
+          <boxGeometry args={[0.07, 0.14, 0.01]} />
+          <meshStandardMaterial color={color} metalness={0.55} roughness={0.28} />
+        </mesh>
+        <mesh position={[0, 0.005, 0.006]}>
+          <boxGeometry args={[0.055, 0.1, 0.002]} />
+          <meshStandardMaterial color="#1c1c1e" roughness={0.2} metalness={0.4} />
+        </mesh>
+      </group>
+    );
+  }
+  if (shape === "laptop") {
+    return (
+      <group position={[0, -0.02, 0]}>
+        <mesh position={[0, 0.012, 0]} castShadow>
+          <boxGeometry args={[0.18, 0.012, 0.12]} />
+          <meshStandardMaterial color={color} metalness={0.45} roughness={0.3} />
+        </mesh>
+        <mesh position={[0, 0.07, -0.05]} rotation={[-0.45, 0, 0]} castShadow>
+          <boxGeometry args={[0.18, 0.1, 0.008]} />
+          <meshStandardMaterial color="#1c1c1e" metalness={0.5} roughness={0.25} />
+        </mesh>
+      </group>
+    );
+  }
+  if (shape === "watch") {
+    return (
+      <group rotation={[0.4, 0, 0]}>
+        <mesh castShadow>
+          <torusGeometry args={[0.045, 0.012, 8, 18]} />
+          <meshStandardMaterial color="#b9c0c8" metalness={0.8} roughness={0.25} />
+        </mesh>
+        <mesh>
+          <cylinderGeometry args={[0.028, 0.028, 0.012, 16]} />
+          <meshStandardMaterial color={color} metalness={0.6} roughness={0.25} />
+        </mesh>
+      </group>
+    );
+  }
+  if (shape === "chocolate") {
+    return (
+      <mesh castShadow>
+        <boxGeometry args={[0.12, 0.028, 0.07]} />
+        <meshStandardMaterial color="#6b3e22" roughness={0.55} />
+      </mesh>
+    );
+  }
+  if (shape === "buds") {
+    return (
+      <group>
+        <mesh position={[-0.03, 0, 0]} castShadow>
+          <sphereGeometry args={[0.022, 12, 10]} />
+          <meshStandardMaterial color={color} metalness={0.3} roughness={0.4} />
+        </mesh>
+        <mesh position={[0.03, 0, 0]} castShadow>
+          <sphereGeometry args={[0.022, 12, 10]} />
+          <meshStandardMaterial color={color} metalness={0.3} roughness={0.4} />
+        </mesh>
+        <mesh>
+          <boxGeometry args={[0.07, 0.012, 0.03]} />
+          <meshStandardMaterial color="#eceae4" roughness={0.45} />
+        </mesh>
+      </group>
+    );
+  }
   return (
     <group>
-      {rows.map((y) => (
-        <group key={y}>
-          <mesh position={[-0.33, y - 0.12, -0.02]}>
-            <boxGeometry args={[0.46, 0.02, 0.22]} />
-            <meshStandardMaterial color="#3a3128" roughness={0.7} />
-          </mesh>
-          <mesh position={[0.33, y - 0.12, -0.02]}>
-            <boxGeometry args={[0.46, 0.02, 0.22]} />
-            <meshStandardMaterial color="#3a3128" roughness={0.7} />
-          </mesh>
-        </group>
+      <mesh position={[-0.03, 0, 0]} rotation={[0, 0.2, 0.1]} castShadow>
+        <boxGeometry args={[0.07, 0.03, 0.12]} />
+        <meshStandardMaterial color={color} roughness={0.55} />
+      </mesh>
+      <mesh position={[0.03, 0, 0]} rotation={[0, -0.2, -0.1]} castShadow>
+        <boxGeometry args={[0.07, 0.03, 0.12]} />
+        <meshStandardMaterial color={color} roughness={0.55} />
+      </mesh>
+    </group>
+  );
+}
+
+function Shelves({ marks }: { marks: { shape: string; color: string; claimed: boolean }[] }) {
+  const spots: [number, number][] = [
+    [-0.36, 0.48],
+    [0, 0.48],
+    [0.36, 0.48],
+    [-0.36, -0.12],
+    [0, -0.12],
+    [0.36, -0.12],
+  ];
+  return (
+    <group>
+      {[0.34, -0.26].map((y) => (
+        <mesh key={y} position={[0, y, -0.02]}>
+          <boxGeometry args={[1.05, 0.02, 0.28]} />
+          <meshStandardMaterial color="#3a3128" roughness={0.7} />
+        </mesh>
       ))}
-      {rows.flatMap((y, row) =>
-        columns.map((x, column) => (
-          <mesh key={`${row}-${column}`} position={[x, y, -0.02]}>
-            <cylinderGeometry args={[0.055, 0.055, 0.15, 12]} />
-            <meshStandardMaterial
-              color={(row + column) % 2 === 0 ? "#6a5340" : "#4d5960"}
-              metalness={0.45}
-              roughness={0.42}
-            />
-          </mesh>
-        )),
-      )}
+      {spots.map(([x, y], index) => {
+        const mark = marks[index];
+        if (!mark || mark.claimed) return null;
+        return (
+          <group key={`${mark.shape}-${index}`} position={[x, y, 0]}>
+            <PrizeShape shape={mark.shape} color={mark.color} />
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -234,6 +314,7 @@ export function Machine({
   product,
   canInsert,
   onInsert,
+  stock = [],
 }: {
   phase: Phase;
   vendStarted: number;
@@ -241,6 +322,7 @@ export function Machine({
   product: Product | null;
   canInsert: boolean;
   onInsert: () => void;
+  stock?: { shape: string; color: string; claimed: boolean }[];
 }) {
   const flap = useRef<Group>(null);
   const coin = useRef<Group>(null);
@@ -380,18 +462,18 @@ export function Machine({
       <group position={[0, 1.08, 0]}>
         <CabinetShell />
         <mesh position={[0, 0.12, 0.38]} castShadow>
-          <boxGeometry args={[1.05, 1.48, 0.035]} />
+          <boxGeometry args={[1.05, 1.48, 0.008]} />
           <meshPhysicalMaterial
             color="#e7f2fb"
-            transmission={0.86}
-            thickness={0.25}
+            transmission={0.92}
+            thickness={0.04}
             roughness={0.04}
             metalness={0}
             ior={1.45}
             transparent
           />
         </mesh>
-        <Shelves />
+        <Shelves marks={stock} />
         <group ref={spin}>
           <Coil />
         </group>
