@@ -13,21 +13,55 @@ type Props = {
   onComplete: () => void;
 };
 
+// Main stages of the family journey:
+// 1. auto_trip: Home -> Car -> Drive on highway with live GPS (automatic)
+// 2. parking_bay: Car stops at Bay P2-23. USER INTERACTION: "Park Car in Bay P2-23 & Enter Mall"
+// 3. mall_walkthrough: The complete grand architectural shopping mall & glass lift walkthrough:
+//    - Phase 0: Approaching Lift (Family enters from parking and walks across Ground Floor to Glass Lift)
+//    - Phase 1: Entering Lift (Elevator doors slide open, family walks INSIDE the elevator cabin)
+//    - Phase 2: Lift Doors Close (Doors slide shut, level 2 selected)
+//    - Phase 3: Lift Ascending (Elevator cabin visibly ascends up shaft P2 -> L1 -> L2 past shops, DING! chime)
+//    - Phase 4: Exiting Lift (Doors slide open at Level 2, family walks OUT of the elevator)
+//    - Phase 5: Moving to Play Area (Family walks across Level 2 into the Play Area & Vending Machine)
+//    - Phase 6: At Machine (Maya holds coin to slot, Leo cheering, user ready to play!)
 type JourneyStage = "auto_trip" | "parking_bay" | "mall_walkthrough";
 
 export function FamilyJourney({ onComplete }: Props) {
   const [stage, setStage] = useState<JourneyStage>("auto_trip");
+
+  // Sub-step inside auto_trip:
+  // 0: Door opens at home
+  // 1: Walking along stone pathway
+  // 2: Sitting inside car
+  // 3: Headlights beam on, engine powers up
+  // 4: Highway driving with in-car GPS navigation dashboard
   const [autoStep, setAutoStep] = useState(0);
 
+  // GPS navigation road progress (0.0 to 1.0)
   const [carProgress, setCarProgress] = useState(0.12);
   const [radioPlaying, setRadioPlaying] = useState(true);
 
-  const [mallStep, setMallStep] = useState<0 | 1 | 2 | 3>(0);
+  // Mall walkthrough phases:
+  // 0 = Walking across ground floor to lift
+  // 1 = Doors open, family walks INSIDE the lift cabin
+  // 2 = Doors close
+  // 3 = Lift cabin visibly ascends from P2 -> L1 -> L2 (Ding!)
+  // 4 = Doors open at Level 2, family walks OUT of the lift
+  // 5 = Family walks into the Play Area right in front of Vending Machine
+  // 6 = Ready to play!
+  const [walkPhase, setWalkPhase] = useState<0 | 1 | 2 | 3 | 4 | 5 | 6>(0);
 
-  const [liftFloor, setLiftFloor] = useState<"P2" | "L1" | "L2">("P2");
-  const [liftDoorOpen, setLiftDoorOpen] = useState(false);
+  // Elevator cabin Y offset (285 = Ground Floor P2, 165 = Level 1, 45 = Level 2)
+  const [cabinY, setCabinY] = useState(285);
+  // Elevator sliding doors open state
+  const [doorsOpen, setDoorsOpen] = useState(false);
+  // Current floor indicator readout
+  const [currentFloor, setCurrentFloor] = useState<"P2" | "L1" | "L2">("P2");
 
-  const [atriumWalkProgress, setAtriumWalkProgress] = useState(0);
+  // Family X position on the floor
+  // Ground floor: 80 -> 330 (walk to lift) -> 415 (inside cabin)
+  // Level 2: 415 (inside cabin) -> 535 (walk out) -> 660 (at vending machine)
+  const [familyX, setFamilyX] = useState(80);
 
   const timersRef = useRef<number[]>([]);
   const clearAllTimers = () => {
@@ -41,19 +75,28 @@ export function FamilyJourney({ onComplete }: Props) {
     return id;
   };
 
+  // =========================================================================
+  // 1. AUTOMATIC CINEMATIC SEQUENCE: Home -> Walk -> Board Car -> Drive with GPS
+  // Strictly automatic without asking the user until reaching the parking bay!
+  // =========================================================================
   useEffect(() => {
     if (stage !== "auto_trip") return;
 
+    // t = 0ms: Door opens
+    // t = 1100ms: Family starts walking along stone pathway towards car
     addTimer(() => setAutoStep(1), 1100);
 
+    // t = 2400ms: Family reaches car, doors open, kids & Dad sit inside
     addTimer(() => {
       setAutoStep(2);
       unlockAudio();
       playEngineStart();
     }, 2400);
 
+    // t = 3600ms: Headlights beam on, car rolls out of driveway
     addTimer(() => setAutoStep(3), 3600);
 
+    // t = 4600ms: Smoothly transitions to highway driving with live GPS navigation
     addTimer(() => {
       setAutoStep(4);
       unlockAudio();
@@ -63,6 +106,7 @@ export function FamilyJourney({ onComplete }: Props) {
     return () => clearAllTimers();
   }, [stage]);
 
+  // Handle GPS Driving progress during autoStep === 4
   useEffect(() => {
     if (stage !== "auto_trip" || autoStep !== 4) return;
 
@@ -70,6 +114,7 @@ export function FamilyJourney({ onComplete }: Props) {
       setCarProgress((prev) => {
         if (prev >= 0.96) {
           window.clearInterval(interval);
+          // Car reaches Starlight Mall underground parking bay -> Now stop and ask the user!
           addTimer(() => {
             unlockAudio();
             playParkingBeep();
@@ -87,6 +132,7 @@ export function FamilyJourney({ onComplete }: Props) {
     };
   }, [stage, autoStep]);
 
+  // Fast forward directly to parking bay if user prefers
   const handleFastForwardToParking = () => {
     clearAllTimers();
     unlockAudio();
@@ -94,53 +140,135 @@ export function FamilyJourney({ onComplete }: Props) {
     setStage("parking_bay");
   };
 
+  // =========================================================================
+  // 2. USER CLICKS TO PARK: LAUNCHES THE COMPLETE ANIMATED MALL & LIFT JOURNEY!
+  // "the lift is not properly designed make how people enters the lift and
+  // when their floor comes they come out and move to that area"
+  // =========================================================================
   const handleParkAndEnterMall = () => {
     clearAllTimers();
     unlockAudio();
     playCarLock();
     setStage("mall_walkthrough");
-    setMallStep(0);
 
+    // Initialize state at Ground Floor:
+    setWalkPhase(0);
+    setFamilyX(80);
+    setCabinY(285);
+    setDoorsOpen(false);
+    setCurrentFloor("P2");
+
+    // ---------------------------------------------------------------------
+    // TIMELINE OF THE COMPLETE ANIMATED SEQUENCE:
+    // ---------------------------------------------------------------------
+
+    // PHASE 0: Family walks across Ground Floor towards the lift (t = 0 to 2200ms)
+    let curX = 80;
+    const walkToLiftInterval = window.setInterval(() => {
+      curX += 16;
+      if (curX >= 330) {
+        curX = 330;
+        window.clearInterval(walkToLiftInterval);
+      }
+      setFamilyX(curX);
+    }, 120);
+
+    // PHASE 1: At t = 2400ms, elevator doors SLIDE OPEN, family walks INSIDE!
     addTimer(() => {
-      setMallStep(1);
-      let p = 0;
-      const walkInterval = window.setInterval(() => {
-        p += 5;
-        if (p >= 100) {
-          p = 100;
-          window.clearInterval(walkInterval);
+      setDoorsOpen(true);
+      setWalkPhase(1);
+
+      // Family steps inside the elevator cabin: X moves from 330 to 415
+      let inX = 330;
+      const enterLiftInterval = window.setInterval(() => {
+        inX += 10;
+        if (inX >= 415) {
+          inX = 415;
+          window.clearInterval(enterLiftInterval);
         }
-        setAtriumWalkProgress(p);
-      }, 160);
-    }, 3200);
+        setFamilyX(inX);
+      }, 140);
+    }, 2400);
 
+    // PHASE 2: At t = 4200ms, elevator doors SLIDE CLOSED!
     addTimer(() => {
-      setMallStep(2);
-      setLiftFloor("P2");
-      setLiftDoorOpen(false);
+      setDoorsOpen(false);
+      setWalkPhase(2);
+    }, 4200);
 
-      addTimer(() => setLiftFloor("L1"), 1600);
-      addTimer(() => {
-        setLiftFloor("L2");
-        unlockAudio();
-        playElevatorDing();
-        setLiftDoorOpen(true);
-      }, 3400);
+    // PHASE 3: At t = 5000ms, elevator cabin VISIBLY ASCENDS through the shaft!
+    addTimer(() => {
+      setWalkPhase(3);
 
-      addTimer(() => {
-        setMallStep(3);
-      }, 5000);
-    }, 7200);
+      // Cabin Y moves smoothly from 285 up to 45 over 3.6 seconds:
+      let curY = 285;
+      const ascendInterval = window.setInterval(() => {
+        curY -= 8;
+        if (curY <= 170 && curY > 150) {
+          setCurrentFloor("L1");
+        }
+        if (curY <= 45) {
+          curY = 45;
+          setCurrentFloor("L2");
+          window.clearInterval(ascendInterval);
+        }
+        setCabinY(curY);
+      }, 110);
+    }, 5000);
+
+    // PHASE 4: At t = 8800ms, elevator arrives at Level 2, DING! doors SLIDE OPEN!
+    addTimer(() => {
+      unlockAudio();
+      playElevatorDing();
+      setDoorsOpen(true);
+      setWalkPhase(4);
+
+      // Family walks OUT of the elevator cabin onto Level 2: X moves from 415 to 540
+      let outX = 415;
+      const exitLiftInterval = window.setInterval(() => {
+        outX += 12;
+        if (outX >= 540) {
+          outX = 540;
+          window.clearInterval(exitLiftInterval);
+        }
+        setFamilyX(outX);
+      }, 140);
+    }, 8800);
+
+    // PHASE 5: At t = 10800ms, family moves across Level 2 to the Vending Machine!
+    addTimer(() => {
+      setWalkPhase(5);
+
+      // Family walks across Level 2 floor to Vending Machine: X moves from 540 to 660
+      let playX = 540;
+      const walkToMachineInterval = window.setInterval(() => {
+        playX += 12;
+        if (playX >= 660) {
+          playX = 660;
+          window.clearInterval(walkToMachineInterval);
+        }
+        setFamilyX(playX);
+      }, 130);
+    }, 10800);
+
+    // PHASE 6: At t = 12600ms, arrived at Vending Machine! Final CTA ready!
+    addTimer(() => {
+      setWalkPhase(6);
+    }, 12600);
   };
 
+  // Fast-forward directly to the vending machine
   const handleFastForwardToPlayArea = () => {
     clearAllTimers();
     setStage("mall_walkthrough");
-    setMallStep(3);
-    setLiftFloor("L2");
-    setLiftDoorOpen(true);
+    setWalkPhase(6);
+    setCabinY(45);
+    setDoorsOpen(true);
+    setCurrentFloor("L2");
+    setFamilyX(660);
   };
 
+  // Final Action: Step up to Vending Machine & Play!
   const handleStepToMachine = () => {
     unlockAudio();
     playMallFanfare();
@@ -152,6 +280,7 @@ export function FamilyJourney({ onComplete }: Props) {
       <div className="journey-backdrop" onClick={onComplete} />
 
       <div className="journey-shell">
+        {/* Navigation Breadcrumb Bar */}
         <header className="journey-top">
           <div className="journey-breadcrumbs">
             <span className={stage === "auto_trip" && autoStep < 4 ? "crumb active" : "crumb done"}>
@@ -166,15 +295,15 @@ export function FamilyJourney({ onComplete }: Props) {
               3. Parking Bay P2-23
             </span>
             <span className="crumb-arrow">›</span>
-            <span className={stage === "mall_walkthrough" && (mallStep === 0 || mallStep === 1) ? "crumb active" : stage === "mall_walkthrough" && mallStep >= 2 ? "crumb done" : "crumb"}>
-              4. Entering Mall
+            <span className={stage === "mall_walkthrough" && walkPhase <= 2 ? "crumb active" : stage === "mall_walkthrough" && walkPhase > 2 ? "crumb done" : "crumb"}>
+              4. Boarding Glass Lift
             </span>
             <span className="crumb-arrow">›</span>
-            <span className={stage === "mall_walkthrough" && mallStep === 2 ? "crumb active" : stage === "mall_walkthrough" && mallStep === 3 ? "crumb done" : "crumb"}>
-              5. Glass Lift
+            <span className={stage === "mall_walkthrough" && (walkPhase === 3 || walkPhase === 4) ? "crumb active" : stage === "mall_walkthrough" && walkPhase >= 5 ? "crumb done" : "crumb"}>
+              5. Lift Ascending & Exiting
             </span>
             <span className="crumb-arrow">›</span>
-            <span className={stage === "mall_walkthrough" && mallStep === 3 ? "crumb active" : "crumb"}>
+            <span className={stage === "mall_walkthrough" && walkPhase >= 5 ? "crumb active" : "crumb"}>
               6. Play Area & Machine
             </span>
           </div>
@@ -189,8 +318,13 @@ export function FamilyJourney({ onComplete }: Props) {
           </button>
         </header>
 
+        {/* ========================================================
+            STAGE 1: AUTOMATIC CINEMATIC TRIP (HOME -> BOARD CAR -> DRIVE)
+            Strictly automatic without asking the user!
+            ======================================================== */}
         {stage === "auto_trip" && (
           <div className="journey-content scene-auto">
+            {/* Auto-Playing Status Header */}
             <div className="auto-narrative-banner">
               <div className="banner-left">
                 <span className="auto-pulse-dot" />
@@ -208,6 +342,7 @@ export function FamilyJourney({ onComplete }: Props) {
               </div>
             </div>
 
+            {/* Continuous Progress Bar */}
             <div className="auto-timeline-bar">
               <div
                 className="timeline-fill"
@@ -221,6 +356,7 @@ export function FamilyJourney({ onComplete }: Props) {
               />
             </div>
 
+            {/* PART A: HOME & DRIVEWAY (autoStep 0, 1, 2, 3) */}
             {autoStep < 4 ? (
               <div className="home-scene-wrapper">
                 <div className="scene-badge">
@@ -235,6 +371,7 @@ export function FamilyJourney({ onComplete }: Props) {
                   {autoStep >= 3 && "Doors close, headlights beam on! The electric motor powers up as the car rolls out..."}
                 </p>
 
+                {/* Animated Home & Driveway Canvas */}
                 <div className="home-visual-canvas">
                   <svg className="home-svg" viewBox="0 0 780 290">
                     <defs>
@@ -364,6 +501,7 @@ export function FamilyJourney({ onComplete }: Props) {
                 </div>
               </div>
             ) : (
+              /* PART B: ROAD & GPS DASHBOARD (autoStep === 4) */
               <div className="road-scene-wrapper">
                 <div className="scene-badge">
                   🚘 7:22 PM · Expressway 101
@@ -531,6 +669,10 @@ export function FamilyJourney({ onComplete }: Props) {
           </div>
         )}
 
+        {/* ========================================================
+            STAGE 2: PARKING BAY ARRIVAL (USER IS PROMPTED HERE!)
+            "while parking only it should again start asking"
+            ======================================================== */}
         {stage === "parking_bay" && (
           <div className="journey-content scene-parking">
             <div className="scene-badge">
@@ -560,6 +702,7 @@ export function FamilyJourney({ onComplete }: Props) {
                 <line x1="0" y1="35" x2="780" y2="35" stroke="#f59e0b" strokeWidth="3" strokeDasharray="30 20" />
                 <rect x="0" y="75" width="780" height="175" fill="url(#garageFloor)" />
 
+                {/* BAY P2-22 */}
                 <g transform="translate(40, 75)">
                   <rect x="0" y="0" width="160" height="170" fill="rgba(255,255,255,0.02)" stroke="#334155" strokeWidth="2" strokeDasharray="6 6" />
                   <circle cx="80" cy="15" r="5" fill="#ef4444" />
@@ -568,6 +711,7 @@ export function FamilyJourney({ onComplete }: Props) {
                   <rect x="40" y="65" width="80" height="45" rx="4" fill="#0f172a" />
                 </g>
 
+                {/* BAY P2-23 (TARGET) */}
                 <g transform="translate(240, 75)">
                   <rect x="0" y="0" width="220" height="170" fill="rgba(0, 255, 136, 0.08)" stroke="#00ff88" strokeWidth="3" rx="6" />
                   <circle cx="110" cy="15" r="7" fill="#00ff88" filter="url(#glowLight)" />
@@ -583,6 +727,7 @@ export function FamilyJourney({ onComplete }: Props) {
                   </g>
                 </g>
 
+                {/* BAY P2-24 */}
                 <g transform="translate(500, 75)">
                   <rect x="0" y="0" width="110" height="170" fill="rgba(255,255,255,0.02)" stroke="#334155" strokeWidth="2" strokeDasharray="6 6" />
                   <circle cx="55" cy="15" r="5" fill="#ef4444" />
@@ -590,6 +735,7 @@ export function FamilyJourney({ onComplete }: Props) {
                   <rect x="15" y="50" width="80" height="105" rx="6" fill="#1e293b" />
                 </g>
 
+                {/* DIRECT ENTRANCE TO MALL ATRIUM */}
                 <g transform="translate(635, 50)">
                   <rect x="0" y="0" width="135" height="190" fill="url(#mallDoorGlow)" rx="8" stroke="#38bdf8" strokeWidth="2" />
                   <rect x="8" y="10" width="119" height="24" rx="4" fill="#0f172a" />
@@ -619,27 +765,22 @@ export function FamilyJourney({ onComplete }: Props) {
               </div>
               <div className="parking-status-text">
                 <span className="status-badge success">READY TO PARK</span>
-                <p className="lock-note">Click below to park vehicle and start the animated walk into the mall!</p>
+                <p className="lock-note">Click below to park car and watch the family enter the mall and take the glass lift!</p>
               </div>
             </div>
 
             <div className="journey-dialogue-card">
               <div className="dialogue-row boy">
                 <span className="avatar">👦</span>
-                <div>
-                  <strong>Leo:</strong>
-                  <p>“Dad, park right here in Bay P2-23! The glass mall entrance doors are right in front of us!”</p>
-                </div>
+                <div><strong>Leo:</strong> “Dad, park in Bay P2-23 right here! The mall doors are right ahead!”</div>
               </div>
               <div className="dialogue-row girl">
                 <span className="avatar">👧</span>
-                <div>
-                  <strong>Maya:</strong>
-                  <p>“Yay, we arrived! Unbuckle us as soon as you park so we can go inside!”</p>
-                </div>
+                <div><strong>Maya:</strong> “Yay! Park the car so we can go inside and take the glass elevator!”</div>
               </div>
             </div>
 
+            {/* ACTION: PARK VEHICLE & LAUNCH ANIMATED WALKTHROUGH */}
             <div className="journey-actions">
               <button
                 type="button"
@@ -652,577 +793,411 @@ export function FamilyJourney({ onComplete }: Props) {
           </div>
         )}
 
+        {/* ========================================================
+            STAGE 3: THE COMPLETE ANIMATED SHOPPING MALL & GLASS LIFT JOURNEY!
+            "the lift is not properly designed make how people enters the lift
+            and when their floor comes they come out and move to that area"
+            ======================================================== */}
         {stage === "mall_walkthrough" && (
           <div className="journey-content scene-walkthrough">
+            {/* Live Progress Banner with Fast-Forward Shortcut */}
             <div className="auto-narrative-banner">
               <div className="banner-left">
                 <span className="auto-pulse-dot" />
                 <strong>
-                  {mallStep === 0 && "STEPPING OUT OF CAR & ENTERING MALL DOORS..."}
-                  {mallStep === 1 && "WALKING ACROSS GRAND ATRIUM TO GLASS LIFT..."}
-                  {mallStep === 2 && "ASCENDING IN GLASS LIFT TO LEVEL 2 PLAY AREA..."}
-                  {mallStep === 3 && "✨ ARRIVED AT LEVEL 2 PLAY AREA & VENDING MACHINE! ✨"}
+                  {walkPhase === 0 && "STEPPING INTO MALL: WALKING ACROSS GROUND FLOOR TO GLASS LIFT..."}
+                  {walkPhase === 1 && "DOORS SLIDE OPEN: FAMILY WALKS INSIDE THE GLASS LIFT!"}
+                  {walkPhase === 2 && "DOORS SLIDE SHUT: LEVEL 2 SELECTED · PREPARING TO ASCEND..."}
+                  {walkPhase === 3 && "GLASS LIFT ASCENDING THROUGH ATRIUM TO LEVEL 2 (PLAY AREA)..."}
+                  {walkPhase === 4 && "DING! DOORS OPEN AT LEVEL 2: FAMILY WALKS OUT OF THE LIFT!"}
+                  {walkPhase === 5 && "WALKING ACROSS LEVEL 2 INTO THE PLAY AREA & VENDING MACHINE!"}
+                  {walkPhase === 6 && "✨ ARRIVED AT THE PLAY AREA! READY TO PLAY THE VENDING MACHINE! ✨"}
                 </strong>
               </div>
-              {mallStep < 3 && (
+              {walkPhase < 5 && (
                 <div className="banner-right">
                   <button
                     type="button"
                     className="ff-link-btn"
                     onClick={handleFastForwardToPlayArea}
-                    title="Jump straight to the playing area & machine"
+                    title="Jump straight to the play area"
                   >
-                    Jump to Playing Area 🎪 ⏩
+                    Jump to Play Area 🎪 ⏩
                   </button>
                 </div>
               )}
             </div>
 
-            <div className="auto-timeline-bar">
-              <div
-                className="timeline-fill"
-                style={{
-                  width: `${
-                    mallStep === 0 ? "25%" : mallStep === 1 ? "50%" : mallStep === 2 ? "75%" : "100%"
-                  }`,
-                }}
-              />
+            {/* Sub-scene Header Badge */}
+            <div className="scene-badge">
+              {walkPhase <= 2 && "🏬 Ground Floor Lobby · Boarding the Central Glass Lift"}
+              {walkPhase === 3 && `🛗 Central Glass Shaft · Ascending to Floor ${currentFloor}`}
+              {walkPhase >= 4 && "✨ Level 2 · Play Area, Wonderland Arcade & Vending Machine"}
+              <span className="auto-pill">
+                {walkPhase === 0 && "1/5: Walking to Lift"}
+                {walkPhase === 1 && "2/5: Entering Lift Cabin"}
+                {walkPhase === 2 && "Doors Closing"}
+                {walkPhase === 3 && "3/5: Ascending to L2"}
+                {walkPhase === 4 && "4/5: Exiting Lift Cabin"}
+                {walkPhase >= 5 && "5/5: Arrived at Machine"}
+              </span>
             </div>
 
-            {mallStep === 0 && (
-              <div className="walkthrough-step-view">
-                <div className="scene-badge">
-                  🅿️ 7:32 PM · Underground Parking P2 Entrance
-                  <span className="auto-pill">Stepping Out & Entering Mall Doors</span>
-                </div>
-                <h2>Car Parked · Walking Through Sliding Mall Doors</h2>
-                <p className="scene-lead">
-                  The car locks safely with a remote chirp. Dad, Maya, and Leo step out and walk through the automatic sliding glass doors into Starlight Mall!
-                </p>
+            <h2>
+              {walkPhase <= 2 && "Entering the Mall & Boarding the Central Glass Lift"}
+              {walkPhase === 3 && "Ascending Through the Grand Atrium in the Glass Lift"}
+              {walkPhase >= 4 && "Exiting the Lift into the Level 2 Play Area!"}
+            </h2>
+            <p className="scene-lead">
+              {walkPhase === 0 && "The family enters through the sliding doors and walks across the polished marble floor straight towards the open glass elevator."}
+              {walkPhase === 1 && "The elevator doors slide open with warm interior light! Dad, Maya, and Leo walk directly inside the glass cabin."}
+              {walkPhase === 2 && "The doors slide closed, locking the cabin safely as the lift motor hums to life."}
+              {walkPhase === 3 && "The glass cabin visibly climbs up through the central atrium! You can see Level 1 boutiques and chandeliers glide past outside through the transparent glass."}
+              {walkPhase === 4 && "DING! The elevator arrives at Level 2. The glass doors slide open and the family walks out onto the arcade floor!"}
+              {walkPhase >= 5 && "The family walks past the arcade games straight up to the glowing centerpiece: The Impossible Vending Machine!"}
+            </p>
 
-                <div className="parking-visual-canvas">
-                  <svg className="parking-svg" viewBox="0 0 780 250">
-                    <rect x="0" y="0" width="780" height="70" fill="#0f172a" />
-                    <rect x="0" y="75" width="780" height="175" fill="#080c14" />
+            {/* ========================================================
+                GRAND ARCHITECTURAL SHOPPING MALL, GLASS LIFT & PLAY AREA CANVAS
+                ViewBox: 840 x 440 (Shows Ground Floor, Level 1, Level 2,
+                Lift Tower, Cabin physically moving, and people walking!)
+                ======================================================== */}
+            <div className="mall-grand-atrium-canvas">
+              <svg className="mall-grand-svg" viewBox="0 0 840 440">
+                <defs>
+                  {/* Sky & Lighting Gradients */}
+                  <linearGradient id="mallVaultGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#040816" />
+                    <stop offset="40%" stopColor="#0a1532" />
+                    <stop offset="100%" stopColor="#111c38" />
+                  </linearGradient>
+                  <linearGradient id="shaftGlassGrad" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="rgba(0, 245, 255, 0.45)" />
+                    <stop offset="50%" stopColor="rgba(0, 245, 255, 0.08)" />
+                    <stop offset="100%" stopColor="rgba(0, 245, 255, 0.45)" />
+                  </linearGradient>
+                  <linearGradient id="cabinGlass" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="rgba(56, 189, 248, 0.35)" />
+                    <stop offset="100%" stopColor="rgba(0, 245, 255, 0.12)" />
+                  </linearGradient>
+                  <linearGradient id="marbleTile" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#15213b" />
+                    <stop offset="100%" stopColor="#0a0f1d" />
+                  </linearGradient>
+                  <linearGradient id="machineNeon" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#ff4b72" />
+                    <stop offset="50%" stopColor="#bf5af2" />
+                    <stop offset="100%" stopColor="#00f5ff" />
+                  </linearGradient>
+                </defs>
 
-                    <g transform="translate(60, 75)">
-                      <rect x="0" y="0" width="220" height="170" fill="rgba(0, 255, 136, 0.05)" stroke="#00ff88" strokeWidth="2" rx="6" />
-                      <text x="110" y="25" textAnchor="middle" fill="#00ff88" fontSize="11" fontFamily="var(--mono)">BAY P2-23 [LOCKED]</text>
-                      <g transform="translate(25, 45)">
-                        <rect x="0" y="0" width="170" height="110" rx="10" fill="#030712" stroke="#00f5ff" strokeWidth="2" />
-                        <rect x="25" y="20" width="120" height="55" rx="6" fill="#0f172a" />
-                        <circle cx="35" cy="100" r="10" fill="#000" stroke="#00f5ff" strokeWidth="2" />
-                        <circle cx="135" cy="100" r="10" fill="#000" stroke="#00f5ff" strokeWidth="2" />
-                      </g>
+                {/* 1. Atrium Vaulted Background */}
+                <rect x="0" y="0" width="840" height="440" fill="url(#mallVaultGrad)" />
+                {/* Skylight Steel Arches */}
+                <path d="M 0,0 Q 420,80 840,0" fill="none" stroke="rgba(0, 245, 255, 0.3)" strokeWidth="3" />
+                <circle cx="210" cy="55" r="5" fill="#fde047" filter="url(#glowLight)" />
+                <circle cx="630" cy="55" r="5" fill="#38bdf8" filter="url(#glowLight)" />
+
+                {/* 2. LEVEL 1 (MID FLOOR): MEZZANINE SHOPS (Left Side) */}
+                <g transform="translate(0, 250)">
+                  <rect x="0" y="0" width="345" height="15" fill="#1e293b" stroke="#334155" strokeWidth="1" />
+                  <rect x="0" y="-18" width="345" height="18" fill="rgba(56, 189, 248, 0.15)" stroke="#64748b" strokeWidth="1" />
+                  <g transform="translate(15, -45)">
+                    <rect x="0" y="0" width="95" height="24" rx="3" fill="#0f172a" stroke="#38bdf8" strokeWidth="1" />
+                    <text x="47" y="16" textAnchor="middle" fill="#38bdf8" fontSize="9" fontFamily="var(--mono)">👗 FASHION</text>
+                    <rect x="110" y="0" width="95" height="24" rx="3" fill="#0f172a" stroke="#f472b6" strokeWidth="1" />
+                    <text x="157" y="16" textAnchor="middle" fill="#f472b6" fontSize="9" fontFamily="var(--mono)">🍰 BAKERY</text>
+                    <rect x="220" y="0" width="95" height="24" rx="3" fill="#0f172a" stroke="#facc15" strokeWidth="1" />
+                    <text x="267" y="16" textAnchor="middle" fill="#facc15" fontSize="9" fontFamily="var(--mono)">☕ CAFE</text>
+                  </g>
+                </g>
+
+                {/* 3. LEVEL 2 (TOP FLOOR): THE PLAY AREA & ARCADE (Right Side) */}
+                <g transform="translate(545, 130)">
+                  <rect x="0" y="0" width="295" height="16" fill="#1e293b" stroke="#334155" strokeWidth="1" />
+                  <rect x="0" y="-18" width="295" height="18" fill="rgba(244, 63, 94, 0.2)" stroke="#f43f5e" strokeWidth="1" />
+                  {/* Neon Signboard for Play Area */}
+                  <rect x="10" y="-115" width="275" height="26" rx="5" fill="#2e1065" stroke="url(#machineNeon)" strokeWidth="2" />
+                  <text x="147" y="-98" textAnchor="middle" fill="#ffffff" fontWeight="bold" fontSize="10.5" fontFamily="var(--mono)">
+                    ★ LEVEL 2: STARLIGHT PLAY AREA ★
+                  </text>
+                  {/* Bunting & Arcade Games */}
+                  <path d="M 10,-80 Q 75,-65 140,-80 Q 205,-65 270,-80" fill="none" stroke="#f59e0b" strokeWidth="2" strokeDasharray="8 6" />
+                  <circle cx="45" cy="-70" r="4" fill="#fde047" />
+                  <circle cx="110" cy="-70" r="4" fill="#ff4b72" />
+                  <circle cx="180" cy="-70" r="4" fill="#00f5ff" />
+
+                  {/* Pinball Machine on Level 2 */}
+                  <g transform="translate(15, -75)" opacity="0.85">
+                    <rect x="0" y="0" width="45" height="75" rx="3" fill="#1e1b4b" stroke="#4338ca" strokeWidth="1.5" />
+                    <rect x="5" y="8" width="35" height="26" fill="#064e3b" />
+                    <text x="22" y="25" textAnchor="middle" fill="#34d399" fontSize="7" fontFamily="var(--mono)">PINBALL</text>
+                  </g>
+
+                  {/* Racing Rig on Level 2 */}
+                  <g transform="translate(70, -75)" opacity="0.85">
+                    <rect x="0" y="0" width="45" height="75" rx="3" fill="#1e1b4b" stroke="#ec4899" strokeWidth="1.5" />
+                    <rect x="5" y="8" width="35" height="26" fill="#831843" />
+                    <text x="22" y="25" textAnchor="middle" fill="#f472b6" fontSize="7" fontFamily="var(--mono)">RACING</text>
+                  </g>
+
+                  {/* ========================================================
+                      HERO PIECE: THE 3D IMPOSSIBLE VENDING MACHINE!
+                      Standing at x = 135 to 265 on Level 2
+                      ======================================================== */}
+                  <g transform="translate(135, -125)">
+                    {/* Machine Outer Shell */}
+                    <rect x="0" y="0" width="130" height="125" rx="10" fill="#080e1c" stroke="url(#machineNeon)" strokeWidth="3" filter="url(#glowLight)" />
+                    {/* Header Marquee */}
+                    <rect x="8" y="8" width="114" height="18" rx="4" fill="#1e1b4b" stroke="#00f5ff" strokeWidth="1" />
+                    <text x="65" y="21" textAnchor="middle" fill="#00f5ff" fontSize="7.5" fontWeight="bold" fontFamily="var(--mono)">
+                      IMPOSSIBLE VENDING
+                    </text>
+                    {/* Glass Window with Coils & Gifts */}
+                    <rect x="10" y="30" width="110" height="60" rx="5" fill="rgba(6, 182, 212, 0.22)" stroke="#00f5ff" strokeWidth="1.5" />
+                    {/* Coils & Colorful Gift Spheres */}
+                    <line x1="16" y1="46" x2="114" y2="46" stroke="#f43f5e" strokeWidth="2.5" strokeDasharray="6 4" />
+                    <circle cx="32" cy="46" r="6" fill="#facc15" filter="url(#glowLight)" />
+                    <circle cx="58" cy="46" r="6" fill="#ff4b72" filter="url(#glowLight)" />
+                    <circle cx="84" cy="46" r="6" fill="#00f5ff" filter="url(#glowLight)" />
+                    <line x1="16" y1="68" x2="114" y2="68" stroke="#a855f7" strokeWidth="2.5" strokeDasharray="6 4" />
+                    <circle cx="32" cy="68" r="6" fill="#38bdf8" />
+                    <circle cx="58" cy="68" r="6" fill="#4ade80" />
+                    <circle cx="84" cy="68" r="6" fill="#fb923c" />
+
+                    {/* Coin Slot with Pulsing Glow Pointer */}
+                    <g transform="translate(78, 94)">
+                      <rect x="0" y="0" width="40" height="18" rx="3" fill="#0f172a" stroke="#f59e0b" strokeWidth="1.5" className="animated-coin-slot" />
+                      <circle cx="10" cy="9" r="3.5" fill="#f59e0b" />
+                      <text x="26" y="12" textAnchor="middle" fill="#f59e0b" fontWeight="bold" fontSize="6.5" fontFamily="var(--mono)">COIN</text>
                     </g>
+                    {/* Prize Chute */}
+                    <rect x="14" y="93" width="56" height="24" rx="4" fill="#020617" stroke="#334155" strokeWidth="1.5" />
+                    <text x="42" y="108" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="6.5" fontFamily="var(--mono)">PRIZE CHUTE</text>
+                  </g>
+                </g>
 
-                    <g transform="translate(600, 45)">
-                      <rect x="0" y="0" width="170" height="200" fill="rgba(254, 240, 138, 0.45)" rx="8" stroke="#38bdf8" strokeWidth="3" />
-                      <rect x="5" y="10" width="25" height="180" fill="rgba(56, 189, 248, 0.3)" stroke="#00f5ff" strokeWidth="1.5" />
-                      <rect x="140" y="10" width="25" height="180" fill="rgba(56, 189, 248, 0.3)" stroke="#00f5ff" strokeWidth="1.5" />
-                      <text x="85" y="30" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="10" fontFamily="var(--mono)">
-                        ◄ SLIDING DOORS OPEN ►
-                      </text>
-                      <text x="85" y="110" textAnchor="middle" fill="#ffffff" fontSize="32">🏬</text>
-                      <text x="85" y="150" textAnchor="middle" fill="#00f5ff" fontWeight="bold" fontSize="10" fontFamily="var(--mono)">
-                        GRAND MALL ATRIUM
-                      </text>
-                    </g>
+                {/* 4. GROUND FLOOR LOBBY (P2) POLISHED REFLECTIVE MARBLE */}
+                <polygon points="0,440 0,370 840,370 840,440" fill="url(#marbleTile)" />
+                <line x1="0" y1="400" x2="840" y2="400" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1" />
 
-                    <g transform="translate(420, 160)" className="animated-walking-actor">
-                      <g transform="translate(0, 0)">
-                        <circle cx="0" cy="-28" r="8" fill="#e2b186" />
-                        <rect x="-5" y="-19" width="10" height="24" rx="2" fill="#1e293b" />
-                        <line x1="-3" y1="5" x2="-7" y2="28" stroke="#0f172a" strokeWidth="3.5" className="animated-leg-left" />
-                        <line x1="3" y1="5" x2="7" y2="28" stroke="#0f172a" strokeWidth="3.5" className="animated-leg-right" />
-                      </g>
+                {/* Left Side: Automatic Sliding Glass Doors from Parking */}
+                <g transform="translate(20, 305)">
+                  <rect x="0" y="0" width="12" height="75" fill="#334155" />
+                  <rect x="90" y="0" width="12" height="75" fill="#334155" />
+                  <rect x="12" y="4" width="22" height="67" fill="rgba(56, 189, 248, 0.25)" stroke="#38bdf8" strokeWidth="1.5" />
+                  <rect x="68" y="4" width="22" height="67" fill="rgba(56, 189, 248, 0.25)" stroke="#38bdf8" strokeWidth="1.5" />
+                  <rect x="-8" y="-14" width="120" height="14" rx="2" fill="#0f172a" stroke="#00f5ff" strokeWidth="1" />
+                  <text x="52" y="-3" textAnchor="middle" fill="#00f5ff" fontSize="7" fontFamily="var(--mono)">
+                    ◄ FROM PARKING P2-23
+                  </text>
+                </g>
 
-                      <g transform="translate(36, 4)">
-                        <circle cx="0" cy="-20" r="6.5" fill="#e2b186" />
-                        <circle cx="-5" cy="-22" r="3" fill="#713f12" />
-                        <rect x="-4" y="-13" width="8" height="17" rx="2" fill="#ff85a1" />
-                        <circle cx="6" cy="-4" r="4.5" fill="#ffd700" className="animated-lucky-coin" />
-                        <line x1="-2" y1="4" x2="-5" y2="22" stroke="#0f172a" strokeWidth="3" className="animated-leg-left" />
-                        <line x1="2" y1="4" x2="5" y2="22" stroke="#0f172a" strokeWidth="3" className="animated-leg-right" />
-                      </g>
+                {/* ========================================================
+                    5. THE CENTRAL GLASS ELEVATOR TOWER (x = 350 to 540)
+                    A Realistic, Magnificent Glass Lift Shaft & Moving Cabin!
+                    ======================================================== */}
+                <g transform="translate(350, 20)">
+                  {/* Vertical Steel & Glass Shaft Columns */}
+                  <rect x="0" y="10" width="190" height="350" fill="url(#shaftGlassGrad)" stroke="#00f5ff" strokeWidth="2.5" />
+                  <line x1="25" y1="10" x2="25" y2="360" stroke="#00f5ff" strokeWidth="1" strokeDasharray="6 6" />
+                  <line x1="165" y1="10" x2="165" y2="360" stroke="#00f5ff" strokeWidth="1" strokeDasharray="6 6" />
 
-                      <g transform="translate(70, 6)">
-                        <circle cx="0" cy="-18" r="6" fill="#e2b186" />
-                        <rect x="-4" y="-21" width="8" height="3" fill="#38bdf8" />
-                        <rect x="-3" y="-11" width="6" height="15" rx="2" fill="#38bdf8" />
-                        <line x1="-2" y1="4" x2="-5" y2="18" stroke="#0f172a" strokeWidth="2.5" className="animated-leg-left" />
-                        <line x1="2" y1="4" x2="5" y2="18" stroke="#0f172a" strokeWidth="2.5" className="animated-leg-right" />
-                      </g>
-                    </g>
-                  </svg>
-                </div>
+                  {/* Top Machine House & Hoist Cables */}
+                  <rect x="-5" y="-5" width="200" height="18" rx="4" fill="#020617" stroke="#00ff88" strokeWidth="2" />
+                  <text x="95" y="8" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="8.5" fontFamily="var(--mono)">
+                    🛗 CENTRAL GLASS LIFT
+                  </text>
+                  {/* Steel Hoist Cables connected to cabin */}
+                  <line x1="75" y1="10" x2="75" y2={cabinY} stroke="#94a3b8" strokeWidth="2" />
+                  <line x1="115" y1="10" x2="115" y2={cabinY} stroke="#94a3b8" strokeWidth="2" />
 
-                <div className="journey-dialogue-card mini">
-                  <div className="dialogue-row parent">
-                    <span className="avatar">🧔</span>
-                    <div><strong>Dad:</strong> “Car is locked safely in Bay P2-23. Let’s head through the sliding doors!”</div>
-                  </div>
-                  <div className="dialogue-row boy">
-                    <span className="avatar">👦</span>
-                    <div><strong>Leo:</strong> “The automatic doors opened for us! Look at the mall inside!”</div>
-                  </div>
-                </div>
-              </div>
-            )}
+                  {/* Shaft Floor Landing Markers */}
+                  <g transform="translate(165, 45)">
+                    <rect x="5" y="0" width="18" height="14" rx="2" fill={currentFloor === "L2" ? "#00ff88" : "#334155"} />
+                    <text x="14" y="10" textAnchor="middle" fill={currentFloor === "L2" ? "#000" : "#fff"} fontWeight="bold" fontSize="8">L2</text>
+                  </g>
+                  <g transform="translate(165, 165)">
+                    <rect x="5" y="0" width="18" height="14" rx="2" fill={currentFloor === "L1" ? "#00ff88" : "#334155"} />
+                    <text x="14" y="10" textAnchor="middle" fill={currentFloor === "L1" ? "#000" : "#fff"} fontWeight="bold" fontSize="8">L1</text>
+                  </g>
+                  <g transform="translate(165, 285)">
+                    <rect x="5" y="0" width="18" height="14" rx="2" fill={currentFloor === "P2" ? "#00ff88" : "#334155"} />
+                    <text x="14" y="10" textAnchor="middle" fill={currentFloor === "P2" ? "#000" : "#fff"} fontWeight="bold" fontSize="8">P2</text>
+                  </g>
 
-            {mallStep === 1 && (
-              <div className="walkthrough-step-view">
-                <div className="scene-badge">
-                  🏬 7:33 PM · Starlight Shopping Mall Grand Atrium
-                  <span className="auto-pill">Walking Across Atrium to Glass Lift</span>
-                </div>
-                <h2>Walking Across the Atrium to the Central Glass Lift</h2>
-                <p className="scene-lead">
-                  The family steps into the gleaming multi-story mall atrium and walks across the polished marble floor straight towards the Central Panoramic Glass Elevator!
-                </p>
+                  {/* ====================================================
+                      THE MOVING GLASS ELEVATOR CABIN (Y = cabinY)
+                      Physically moves from 285 up to 45!
+                      ==================================================== */}
+                  <g
+                    transform={`translate(20, ${cabinY})`}
+                    style={{ transition: "transform 0.1s linear" }}
+                  >
+                    {/* Cabin Steel Outer Frame */}
+                    <rect x="0" y="0" width="150" height="95" rx="8" fill="#070d1a" stroke="#00ff88" strokeWidth="3" filter="url(#glowLight)" />
+                    {/* Panoramic Curved Glass Panel */}
+                    <rect x="6" y="8" width="138" height="78" rx="6" fill="url(#cabinGlass)" stroke="#38bdf8" strokeWidth="1.5" />
 
-                <div className="mall-entrance-canvas">
-                  <svg className="mall-svg" viewBox="0 0 780 340">
-                    <defs>
-                      <linearGradient id="atriumGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#030816" />
-                        <stop offset="50%" stopColor="#0b1736" />
-                        <stop offset="100%" stopColor="#142145" />
-                      </linearGradient>
-                      <linearGradient id="liftShaftGlow" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="rgba(0, 245, 255, 0.45)" />
-                        <stop offset="50%" stopColor="rgba(0, 245, 255, 0.08)" />
-                        <stop offset="100%" stopColor="rgba(0, 245, 255, 0.45)" />
-                      </linearGradient>
-                    </defs>
-
-                    <rect x="0" y="0" width="780" height="340" fill="url(#atriumGrad)" />
-                    <path d="M 0,0 Q 390,70 780,0" fill="none" stroke="rgba(0, 245, 255, 0.25)" strokeWidth="3" />
-                    <circle cx="200" cy="45" r="5" fill="#fde047" filter="url(#glowLight)" />
-                    <circle cx="340" cy="55" r="7" fill="#38bdf8" filter="url(#glowLight)" />
-
-                    <g transform="translate(0, 75)">
-                      <rect x="0" y="40" width="480" height="14" fill="#1e293b" stroke="#334155" strokeWidth="1" />
-                      <rect x="0" y="24" width="480" height="16" fill="rgba(56, 189, 248, 0.2)" stroke="#00f5ff" strokeWidth="1" />
-                      <rect x="30" y="2" width="420" height="20" rx="4" fill="#2e1065" stroke="#f43f5e" strokeWidth="2" />
-                      <text x="240" y="16" textAnchor="middle" fill="#ffffff" fontWeight="bold" fontSize="11" fontFamily="var(--mono)">
-                        ★ LEVEL 2: STARLIGHT PLAY AREA & WONDERLAND ARCADE ★
-                      </text>
-                    </g>
-
-                    <g transform="translate(0, 155)">
-                      <rect x="0" y="40" width="480" height="14" fill="#1e293b" stroke="#334155" strokeWidth="1" />
-                      <rect x="0" y="24" width="480" height="16" fill="rgba(255, 255, 255, 0.08)" stroke="#64748b" strokeWidth="1" />
-                      <g transform="translate(30, 2)">
-                        <rect x="0" y="0" width="120" height="20" rx="3" fill="#0f172a" stroke="#38bdf8" strokeWidth="1" />
-                        <text x="60" y="14" textAnchor="middle" fill="#38bdf8" fontSize="9" fontFamily="var(--mono)">👗 LUXE FASHION</text>
-                        <rect x="140" y="0" width="130" height="20" rx="3" fill="#0f172a" stroke="#f472b6" strokeWidth="1" />
-                        <text x="205" y="14" textAnchor="middle" fill="#f472b6" fontSize="9" fontFamily="var(--mono)">🍰 SWEET HEAVEN</text>
-                        <rect x="290" y="0" width="110" height="20" rx="3" fill="#0f172a" stroke="#facc15" strokeWidth="1" />
-                        <text x="345" y="14" textAnchor="middle" fill="#facc15" fontSize="9" fontFamily="var(--mono)">☕ CAFE METRO</text>
-                      </g>
-                    </g>
-
-                    <polygon points="0,340 0,230 780,230 780,340" fill="#0b1326" />
-                    <line x1="0" y1="265" x2="780" y2="265" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1" />
-                    <line x1="0" y1="300" x2="780" y2="300" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1" />
-
-                    <g transform="translate(15, 185)">
-                      <rect x="0" y="0" width="14" height="110" fill="#334155" />
-                      <rect x="110" y="0" width="14" height="110" fill="#334155" />
-                      <text x="60" y="-8" textAnchor="middle" fill="#00f5ff" fontSize="8" fontFamily="var(--mono)">
-                        ◄ MALL DOORS
-                      </text>
-                    </g>
-
-                    <g transform="translate(520, 20)">
-                      <rect x="0" y="0" width="220" height="285" rx="14" fill="url(#liftShaftGlow)" stroke="#00f5ff" strokeWidth="3" />
-                      <rect x="-10" y="-18" width="240" height="24" rx="6" fill="#020617" stroke="#00ff88" strokeWidth="2" />
-                      <text x="110" y="-2" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="10" fontFamily="var(--mono)">
-                        🛗 CENTRAL GLASS LIFT
-                      </text>
-
-                      <g transform="translate(35, 175)">
-                        <rect x="0" y="0" width="150" height="105" rx="10" fill="#0f172a" stroke="#00ff88" strokeWidth="3" filter="url(#glowLight)" />
-                        <rect x="8" y="12" width="134" height="82" rx="6" fill="rgba(56, 189, 248, 0.25)" stroke="#38bdf8" strokeWidth="1.5" />
-                        <text x="75" y="32" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="10" fontFamily="var(--mono)">
-                          CABIN AT LEVEL P2
-                        </text>
-                        <text x="75" y="70" textAnchor="middle" fill="#ffffff" fontSize="28">🛗</text>
-                        <circle cx="138" cy="55" r="4" fill="#00ff88" filter="url(#glowLight)" />
-                      </g>
-                    </g>
-
-                    <g transform="translate(180, 205)">
-                      <rect x="0" y="0" width="280" height="26" rx="5" fill="#0f172a" stroke="#f59e0b" strokeWidth="2" />
-                      <text x="140" y="17" textAnchor="middle" fill="#fde047" fontWeight="bold" fontSize="9.5" fontFamily="var(--mono)">
-                        ➔ WALK TO GLASS LIFT ➔ UP TO LEVEL 2
-                      </text>
-                    </g>
-
-                    {(() => {
-                      const xPos = 120 + (atriumWalkProgress / 100) * 370;
-                      return (
-                        <g transform={`translate(${xPos}, 260)`} className="animated-walking-actor">
-                          <ellipse cx="40" cy="30" rx="45" ry="6" fill="rgba(0, 245, 255, 0.15)" />
-
-                          <g transform="translate(0, 0)">
-                            <circle cx="0" cy="-28" r="8.5" fill="#e2b186" />
-                            <rect x="-6" y="-19" width="12" height="26" rx="3" fill="#1e293b" />
-                            <line x1="-4" y1="7" x2="-8" y2="30" stroke="#0f172a" strokeWidth="4" className="animated-leg-left" />
-                            <line x1="4" y1="7" x2="8" y2="30" stroke="#0f172a" strokeWidth="4" className="animated-leg-right" />
-                          </g>
-
-                          <g transform="translate(38, 4)">
-                            <circle cx="0" cy="-20" r="7" fill="#e2b186" />
-                            <circle cx="-6" cy="-22" r="3" fill="#713f12" />
-                            <rect x="-5" y="-13" width="10" height="19" rx="2" fill="#ff85a1" />
-                            <line x1="4" y1="-8" x2="22" y2="-26" stroke="#ff85a1" strokeWidth="3" />
-                            <circle cx="24" cy="-28" r="5" fill="#ffd700" className="animated-lucky-coin" />
-                            <line x1="-3" y1="6" x2="-6" y2="24" stroke="#0f172a" strokeWidth="3" className="animated-leg-left" />
-                            <line x1="3" y1="6" x2="6" y2="24" stroke="#0f172a" strokeWidth="3" className="animated-leg-right" />
-                          </g>
-
-                          <g transform="translate(75, 6)">
-                            <circle cx="0" cy="-18" r="6.5" fill="#e2b186" />
-                            <rect x="-5" y="-22" width="10" height="4" fill="#38bdf8" />
-                            <rect x="-4" y="-12" width="8" height="17" rx="2" fill="#38bdf8" />
-                            <line x1="-4" y1="-8" x2="-12" y2="-24" stroke="#38bdf8" strokeWidth="2.5" />
-                            <line x1="4" y1="-8" x2="16" y2="-24" stroke="#38bdf8" strokeWidth="2.5" />
-                            <line x1="-3" y1="5" x2="-6" y2="20" stroke="#0f172a" strokeWidth="3" className="animated-leg-left" />
-                            <line x1="3" y1="5" x2="6" y2="20" stroke="#0f172a" strokeWidth="3" className="animated-leg-right" />
-                          </g>
-                        </g>
-                      );
-                    })()}
-                  </svg>
-                </div>
-
-                <div className="journey-dialogue-card mini">
-                  <div className="dialogue-row girl">
-                    <span className="avatar">👧</span>
-                    <div><strong>Maya:</strong> “Look at the giant glass elevator straight ahead! It goes all the way to Level 2!”</div>
-                  </div>
-                  <div className="dialogue-row boy">
-                    <span className="avatar">👦</span>
-                    <div><strong>Leo:</strong> “I’ll press the green button! The glass doors are sliding open for us!”</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {mallStep === 2 && (
-              <div className="walkthrough-step-view">
-                <div className="scene-badge">
-                  🛗 7:35 PM · Central Panoramic Glass Elevator
-                  <span className="auto-pill">Ascending Through Mall Atrium</span>
-                </div>
-                <h2>Ascending to Level 2 in the Panoramic Glass Lift</h2>
-                <p className="scene-lead">
-                  The family steps inside the glass lift. As the motor hums, the elevator climbs smoothly through the central atrium with the stores, cafes, and chandeliers gliding below through the transparent glass!
-                </p>
-
-                <div className="lift-scenic-canvas">
-                  <svg className="lift-svg" viewBox="0 0 780 340">
-                    <defs>
-                      <linearGradient id="liftSkyGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#081028" />
-                        <stop offset="100%" stopColor="#111c38" />
-                      </linearGradient>
-                      <linearGradient id="liftGlassGrad" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="rgba(56, 189, 248, 0.25)" />
-                        <stop offset="100%" stopColor="rgba(0, 245, 255, 0.08)" />
-                      </linearGradient>
-                    </defs>
-
-                    <rect x="0" y="0" width="780" height="340" fill="url(#liftSkyGrad)" />
-
-                    {liftFloor === "P2" && (
-                      <g className="scenery-p2" opacity="0.9">
-                        <rect x="0" y="240" width="780" height="100" fill="#0f172a" />
-                        <line x1="0" y1="280" x2="780" y2="280" stroke="#334155" strokeWidth="2" strokeDasharray="14 10" />
-                        <text x="390" y="270" textAnchor="middle" fill="#64748b" fontSize="16" fontFamily="var(--mono)">
-                          GROUND LEVEL P2 · PARKING LOBBY RECEDING BELOW...
-                        </text>
-                      </g>
-                    )}
-
-                    {liftFloor === "L1" && (
-                      <g className="scenery-l1" opacity="0.95">
-                        <rect x="40" y="110" width="220" height="100" rx="8" fill="#1e1b4b" stroke="#818cf8" strokeWidth="2" />
-                        <text x="150" y="155" textAnchor="middle" fill="#c7d2fe" fontWeight="bold" fontSize="13" fontFamily="var(--mono)">
-                          👗 LUXURY BOUTIQUES
-                        </text>
-                        <rect x="520" y="110" width="220" height="100" rx="8" fill="#1e1b4b" stroke="#f472b6" strokeWidth="2" />
-                        <text x="630" y="155" textAnchor="middle" fill="#fbcfe8" fontWeight="bold" fontSize="13" fontFamily="var(--mono)">
-                          🍰 GOURMET DESSERTS
-                        </text>
-                        <text x="390" y="80" textAnchor="middle" fill="#38bdf8" fontSize="14" fontWeight="bold" fontFamily="var(--mono)">
-                          ⬆ LEVEL 1 PASSING OUTSIDE THE GLASS... RISING TO LEVEL 2!
-                        </text>
-                      </g>
-                    )}
-
-                    {liftFloor === "L2" && (
-                      <g className="scenery-l2" opacity="0.95">
-                        <rect x="20" y="35" width="740" height="115" rx="8" fill="#2e1065" stroke="#f43f5e" strokeWidth="3" />
-                        <text x="390" y="75" textAnchor="middle" fill="#ffffff" fontWeight="bold" fontSize="16" fontFamily="var(--mono)">
-                          ★ WELCOME TO LEVEL 2: STARLIGHT PLAY AREA & ARCADE ★
-                        </text>
-                        <text x="390" y="110" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="13" fontFamily="var(--mono)">
-                          🔔 DING! GLASS DOORS OPENING DIRECTLY INTO THE PLAY AREA!
-                        </text>
-                      </g>
-                    )}
-
-                    <g transform="translate(140, 20)">
-                      <rect x="0" y="0" width="500" height="300" rx="18" fill="none" stroke="#00f5ff" strokeWidth="4" />
-                      <rect x="10" y="10" width="480" height="280" rx="14" fill="url(#liftGlassGrad)" stroke="rgba(0, 245, 255, 0.4)" strokeWidth="1.5" />
-
-                      <rect x="60" y="18" width="380" height="42" rx="8" fill="#030712" stroke="#00ff88" strokeWidth="2" />
-                      <text x="250" y="44" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="14" fontFamily="var(--mono)">
-                        {liftFloor === "L2"
-                          ? "★ ARRIVED: LEVEL 2 (PLAY AREA & ARCADE) ★"
-                          : liftFloor === "L1"
-                            ? "⬆ ASCENDING... PASSING LEVEL 1"
-                            : "⬆ ASCENDING FROM LEVEL P2 (PARKING)..."}
-                      </text>
-
-                      <g transform="translate(250, 210)">
-                        <circle cx="-50" cy="-28" r="9" fill="#e2b186" />
-                        <rect x="-56" y="-19" width="12" height="26" rx="3" fill="#1e293b" />
-                        <line x1="-54" y1="7" x2="-58" y2="30" stroke="#0f172a" strokeWidth="4" />
-                        <line x1="-46" y1="7" x2="-42" y2="30" stroke="#0f172a" strokeWidth="4" />
-
-                        <circle cx="0" cy="-20" r="7.5" fill="#e2b186" />
-                        <circle cx="-6" cy="-22" r="3" fill="#713f12" />
-                        <rect x="-5" y="-13" width="10" height="20" rx="2" fill="#ff85a1" />
-                        <circle cx="8" cy="-16" r="4.5" fill="#ffd700" className="animated-lucky-coin" />
-                        <line x1="-3" y1="7" x2="-6" y2="25" stroke="#0f172a" strokeWidth="3" />
-                        <line x1="3" y1="7" x2="6" y2="25" stroke="#0f172a" strokeWidth="3" />
-
-                        <circle cx="45" cy="-18" r="7" fill="#e2b186" />
-                        <rect x="40" y="-22" width="10" height="4" fill="#38bdf8" />
-                        <rect x="41" y="-12" width="8" height="18" rx="2" fill="#38bdf8" />
-                        <line x1="38" y1="-6" x2="28" y2="-18" stroke="#38bdf8" strokeWidth="2.5" />
-                        <line x1="48" y1="-6" x2="58" y2="-18" stroke="#38bdf8" strokeWidth="2.5" />
-                        <line x1="42" y1="6" x2="39" y2="22" stroke="#0f172a" strokeWidth="3" />
-                        <line x1="48" y1="6" x2="51" y2="22" stroke="#0f172a" strokeWidth="3" />
-                      </g>
-
-                      <g className={`svg-lift-doors ${liftDoorOpen ? "open" : "closed"}`}>
-                        <rect
-                          x="10"
-                          y="10"
-                          width="235"
-                          height="280"
-                          fill="rgba(15, 23, 42, 0.88)"
-                          stroke="#00f5ff"
-                          strokeWidth="2"
-                          className="svg-door-left"
-                          style={{
-                            transform: liftDoorOpen ? "translateX(-230px)" : "none",
-                            transition: "transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)",
-                          }}
-                        />
-                        <rect
-                          x="255"
-                          y="10"
-                          width="235"
-                          height="280"
-                          fill="rgba(15, 23, 42, 0.88)"
-                          stroke="#00f5ff"
-                          strokeWidth="2"
-                          className="svg-door-right"
-                          style={{
-                            transform: liftDoorOpen ? "translateX(230px)" : "none",
-                            transition: "transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)",
-                          }}
-                        />
-                      </g>
-                    </g>
-                  </svg>
-                </div>
-
-                <div className="journey-dialogue-card mini">
-                  <div className="dialogue-row boy">
-                    <span className="avatar">👦</span>
-                    <div><strong>Leo:</strong> “We’re passing Level 1! Level 2 is next! Look at the arcade lights!”</div>
-                  </div>
-                  <div className="dialogue-row girl">
-                    <span className="avatar">👧</span>
-                    <div><strong>Maya:</strong> “Ding! The doors are opening right into the Play Area!”</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {mallStep === 3 && (
-              <div className="walkthrough-step-view">
-                <div className="scene-badge">
-                  ✨ 7:36 PM · Level 2 Play Area & Wonderland Arcade
-                  <span className="arcade-live-pill">Final Destination Reached</span>
-                </div>
-                <h2>Arrived at the Play Area: The Vending Machine Revealed!</h2>
-                <p className="scene-lead">
-                  The glass doors slide wide open into the buzzing arcade! Right in the center, glowing with vibrant neon coils and surrounded by cheering people, stands <strong>The Impossible Vending Machine</strong>!
-                </p>
-
-                <div className="playarea-visual-canvas">
-                  <svg className="playarea-svg" viewBox="0 0 780 340">
-                    <defs>
-                      <linearGradient id="arcadeBg" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#250938" />
-                        <stop offset="100%" stopColor="#0b0818" />
-                      </linearGradient>
-                      <linearGradient id="machineGlowGrad" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#ff4b72" />
-                        <stop offset="50%" stopColor="#bf5af2" />
-                        <stop offset="100%" stopColor="#00f5ff" />
-                      </linearGradient>
-                      <linearGradient id="glassCaseGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="rgba(6, 182, 212, 0.28)" />
-                        <stop offset="100%" stopColor="rgba(59, 130, 246, 0.12)" />
-                      </linearGradient>
-                    </defs>
-
-                    <rect x="0" y="0" width="780" height="340" fill="url(#arcadeBg)" />
-                    <path d="M 0,35 Q 195,65 390,35 Q 585,65 780,35" fill="none" stroke="#f43f5e" strokeWidth="2.5" strokeDasharray="14 12" />
-                    <circle cx="95" cy="50" r="5" fill="#fde047" />
-                    <circle cx="290" cy="50" r="5" fill="#00f5ff" />
-                    <circle cx="485" cy="50" r="5" fill="#ff4b72" />
-                    <circle cx="680" cy="50" r="5" fill="#00ff88" />
-
-                    <rect x="180" y="8" width="420" height="32" rx="8" fill="#2e1065" stroke="url(#machineGlowGrad)" strokeWidth="2.5" />
-                    <text x="390" y="29" textAnchor="middle" fill="#ffffff" fontWeight="bold" fontSize="13" fontFamily="var(--mono)">
-                      ★ STARLIGHT WONDERLAND PLAY AREA & ARCADE ★
+                    {/* Digital LED Floor Display Inside Cabin */}
+                    <rect x="35" y="14" width="80" height="18" rx="4" fill="#020617" stroke="#00ff88" strokeWidth="1" />
+                    <text x="75" y="27" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="9" fontFamily="var(--mono)">
+                      FLOOR: {currentFloor}
                     </text>
 
-                    <g opacity="0.75">
-                      <rect x="30" y="90" width="75" height="170" rx="4" fill="#1e1b4b" stroke="#4338ca" strokeWidth="1.5" />
-                      <rect x="38" y="105" width="59" height="50" fill="#064e3b" />
-                      <text x="67" y="135" textAnchor="middle" fill="#34d399" fontSize="10" fontFamily="var(--mono)">PINBALL</text>
-
-                      <rect x="675" y="90" width="75" height="170" rx="4" fill="#1e1b4b" stroke="#ec4899" strokeWidth="1.5" />
-                      <rect x="683" y="105" width="59" height="50" fill="#831843" />
-                      <text x="712" y="135" textAnchor="middle" fill="#f472b6" fontSize="10" fontFamily="var(--mono)">RACING</text>
+                    {/* DUAL SLIDING ELEVATOR DOORS */}
+                    <g className="svg-cabin-doors">
+                      {/* Left Door Panel */}
+                      <rect
+                        x="10"
+                        y="10"
+                        width="64"
+                        height="76"
+                        fill="rgba(15, 23, 42, 0.9)"
+                        stroke="#00f5ff"
+                        strokeWidth="1.5"
+                        style={{
+                          transform: doorsOpen ? "translateX(-60px)" : "none",
+                          transition: "transform 0.65s cubic-bezier(0.16, 1, 0.3, 1)",
+                        }}
+                      />
+                      {/* Right Door Panel */}
+                      <rect
+                        x="76"
+                        y="10"
+                        width="64"
+                        height="76"
+                        fill="rgba(15, 23, 42, 0.9)"
+                        stroke="#00f5ff"
+                        strokeWidth="1.5"
+                        style={{
+                          transform: doorsOpen ? "translateX(60px)" : "none",
+                          transition: "transform 0.65s cubic-bezier(0.16, 1, 0.3, 1)",
+                        }}
+                      />
                     </g>
+                  </g>
+                </g>
 
-                    <g transform="translate(290, 50)">
-                      <rect x="0" y="0" width="200" height="235" rx="14" fill="#0a0f1d" stroke="url(#machineGlowGrad)" strokeWidth="4" filter="url(#glowLight)" />
+                {/* ========================================================
+                    6. THE ANIMATED FAMILY (DAD, MAYA, LEO)
+                    Walking across the floor, entering the lift, ascending,
+                    exiting the lift, and moving to the Play Area!
+                    ======================================================== */}
+                {(() => {
+                  // Y coordinate for family:
+                  // If on ground floor (walkPhase 0 or 1): Y = 380
+                  // If inside cabin (walkPhase 2 or 3): Y moves with cabinY + 80!
+                  // If on Level 2 (walkPhase 4, 5, 6): Y = 140!
+                  const famY =
+                    walkPhase <= 1
+                      ? 380
+                      : walkPhase === 2 || walkPhase === 3
+                        ? 20 + cabinY + 76
+                        : 140;
 
-                      <rect x="14" y="14" width="172" height="28" rx="6" fill="#1e1b4b" stroke="#00f5ff" strokeWidth="1.5" />
-                      <text x="100" y="32" textAnchor="middle" fill="#00f5ff" fontSize="10" fontWeight="bold" fontFamily="var(--mono)">
-                        ✨ IMPOSSIBLE VENDING ✨
-                      </text>
+                  const isWalking = walkPhase === 0 || walkPhase === 1 || walkPhase === 4 || walkPhase === 5;
 
-                      <rect x="16" y="48" width="168" height="115" rx="8" fill="url(#glassCaseGrad)" stroke="#00f5ff" strokeWidth="2" />
+                  return (
+                    <g transform={`translate(${familyX}, ${famY})`}>
+                      {/* Floor shadow */}
+                      <ellipse cx="25" cy="0" rx="35" ry="4" fill="rgba(0, 245, 255, 0.2)" />
 
-                      <line x1="25" y1="75" x2="175" y2="75" stroke="#f43f5e" strokeWidth="3" strokeDasharray="8 6" />
-                      <circle cx="45" cy="75" r="9" fill="#facc15" filter="url(#glowLight)" />
-                      <circle cx="82" cy="75" r="9" fill="#ff4b72" filter="url(#glowLight)" />
-                      <circle cx="118" cy="75" r="9" fill="#00f5ff" filter="url(#glowLight)" />
-                      <circle cx="155" cy="75" r="9" fill="#a855f7" filter="url(#glowLight)" />
-
-                      <line x1="25" y1="110" x2="175" y2="110" stroke="#a855f7" strokeWidth="3" strokeDasharray="8 6" />
-                      <circle cx="45" cy="110" r="9" fill="#38bdf8" />
-                      <circle cx="82" cy="110" r="9" fill="#4ade80" />
-                      <circle cx="118" cy="110" r="9" fill="#fb923c" />
-                      <circle cx="155" cy="110" r="9" fill="#f43f5e" />
-
-                      <line x1="25" y1="145" x2="175" y2="145" stroke="#38bdf8" strokeWidth="3" strokeDasharray="8 6" />
-                      <circle cx="45" cy="145" r="9" fill="#ffd700" />
-                      <circle cx="82" cy="145" r="9" fill="#e879f9" />
-                      <circle cx="118" cy="145" r="9" fill="#22d3ee" />
-                      <circle cx="155" cy="145" r="9" fill="#fde047" />
-
-                      <g transform="translate(125, 172)">
-                        <rect x="0" y="0" width="55" height="24" rx="4" fill="#0f172a" stroke="#f59e0b" strokeWidth="2" className="animated-coin-slot" />
-                        <circle cx="15" cy="12" r="5" fill="#f59e0b" />
-                        <text x="35" y="16" textAnchor="middle" fill="#f59e0b" fontWeight="bold" fontSize="8" fontFamily="var(--mono)">COIN</text>
+                      {/* Dad */}
+                      <g transform="translate(0, -26)" className={isWalking ? "animated-walking-actor" : undefined}>
+                        <circle cx="0" cy="0" r="7.5" fill="#e2b186" />
+                        <rect x="-5" y="8" width="10" height="22" rx="2" fill="#1e293b" />
+                        <line x1="-3" y1="30" x2="-6" y2="48" stroke="#0f172a" strokeWidth="3" className={isWalking ? "animated-leg-left" : undefined} />
+                        <line x1="3" y1="30" x2="6" y2="48" stroke="#0f172a" strokeWidth="3" className={isWalking ? "animated-leg-right" : undefined} />
                       </g>
 
-                      <rect x="22" y="172" width="95" height="48" rx="6" fill="#020617" stroke="#334155" strokeWidth="2" />
-                      <text x="69" y="200" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="9" fontFamily="var(--mono)">
-                        🎁 PRIZE CHUTE
-                      </text>
-                    </g>
-
-                    <g transform="translate(150, 185)">
-                      <circle cx="0" cy="-28" r="8.5" fill="#e2b186" />
-                      <rect x="-6" y="-19" width="12" height="26" rx="3" fill="#1e293b" />
-                      <line x1="-4" y1="7" x2="-8" y2="30" stroke="#0f172a" strokeWidth="4" />
-                      <line x1="4" y1="7" x2="8" y2="30" stroke="#0f172a" strokeWidth="4" />
-
-                      <g transform="translate(45, -5)">
-                        <circle cx="0" cy="-20" r="7" fill="#e2b186" />
-                        <circle cx="-6" cy="-22" r="3" fill="#713f12" />
-                        <rect x="-5" y="-13" width="10" height="20" rx="2" fill="#ff85a1" />
-                        <line x1="5" y1="-7" x2="22" y2="-26" stroke="#ff85a1" strokeWidth="3.5" />
-                        <circle cx="26" cy="-28" r="7" fill="#ffd700" stroke="#f59e0b" strokeWidth="2" className="animated-lucky-coin" />
-                        <line x1="-3" y1="7" x2="-6" y2="25" stroke="#0f172a" strokeWidth="3" />
-                        <line x1="3" y1="7" x2="6" y2="25" stroke="#0f172a" strokeWidth="3" />
+                      {/* Maya (carrying shiny lucky coin) */}
+                      <g transform="translate(30, -22)" className={isWalking ? "animated-walking-actor" : undefined}>
+                        <circle cx="0" cy="0" r="6.5" fill="#e2b186" />
+                        <circle cx="-5" cy="-2" r="2.5" fill="#713f12" />
+                        <rect x="-4" y="7" width="8" height="17" rx="2" fill="#ff85a1" />
+                        {/* Golden coin held high! */}
+                        <line x1="4" y1="11" x2="16" y2="-6" stroke="#ff85a1" strokeWidth="2.5" />
+                        <circle cx="18" cy="-8" r="5.5" fill="#ffd700" stroke="#f59e0b" strokeWidth="1.5" className="animated-lucky-coin" />
+                        <line x1="-2" y1="24" x2="-5" y2="42" stroke="#0f172a" strokeWidth="2.5" className={isWalking ? "animated-leg-left" : undefined} />
+                        <line x1="2" y1="24" x2="5" y2="42" stroke="#0f172a" strokeWidth="2.5" className={isWalking ? "animated-leg-right" : undefined} />
                       </g>
 
-                      <g transform="translate(85, -12)" className="animated-jump">
-                        <circle cx="0" cy="-18" r="6.5" fill="#e2b186" />
-                        <rect x="-5" y="-22" width="10" height="4" fill="#38bdf8" />
-                        <rect x="-4" y="-12" width="8" height="17" rx="2" fill="#38bdf8" />
-                        <line x1="-4" y1="-8" x2="-14" y2="-25" stroke="#38bdf8" strokeWidth="3" />
-                        <line x1="4" y1="-8" x2="14" y2="-25" stroke="#38bdf8" strokeWidth="3" />
-                        <line x1="-3" y1="5" x2="-6" y2="20" stroke="#0f172a" strokeWidth="3" />
-                        <line x1="3" y1="5" x2="6" y2="20" stroke="#0f172a" strokeWidth="3" />
+                      {/* Leo (wearing cap, jumping when arrived) */}
+                      <g transform="translate(56, -20)" className={walkPhase >= 5 ? "animated-jump" : isWalking ? "animated-walking-actor" : undefined}>
+                        <circle cx="0" cy="0" r="6" fill="#e2b186" />
+                        <rect x="-4" y="-3" width="8" height="3" fill="#38bdf8" />
+                        <rect x="-3" y="6" width="6" height="15" rx="2" fill="#38bdf8" />
+                        {/* Arms in air when arrived at machine */}
+                        {walkPhase >= 5 ? (
+                          <>
+                            <line x1="-3" y1="9" x2="-10" y2="-4" stroke="#38bdf8" strokeWidth="2.5" />
+                            <line x1="3" y1="9" x2="10" y2="-4" stroke="#38bdf8" strokeWidth="2.5" />
+                          </>
+                        ) : null}
+                        <line x1="-2" y1="21" x2="-4" y2="38" stroke="#0f172a" strokeWidth="2.5" className={isWalking ? "animated-leg-left" : undefined} />
+                        <line x1="2" y1="21" x2="4" y2="38" stroke="#0f172a" strokeWidth="2.5" className={isWalking ? "animated-leg-right" : undefined} />
                       </g>
                     </g>
+                  );
+                })()}
+              </svg>
+            </div>
 
-                    <g transform="translate(540, 185)" opacity="0.85">
-                      <circle cx="0" cy="-24" r="7.5" fill="#d97706" />
-                      <rect x="-5" y="-16" width="10" height="22" fill="#334155" />
-                      <circle cx="28" cy="-26" r="8" fill="#a78bfa" />
-                      <rect x="23" y="-17" width="11" height="24" fill="#1e1b4b" />
-                      <text x="14" y="-38" textAnchor="middle" fill="#00ff88" fontSize="10" fontWeight="bold" fontFamily="var(--mono)">
-                        “LOOK AT THE PRIZES!”
-                      </text>
-                    </g>
-                  </svg>
-                </div>
-
-                <div className="kids-plea-card">
-                  <div className="plea-sparkle">✨ THE LIFT DOORS OPEN TO THE PLAY AREA! ✨</div>
+            {/* Live Story Dialogue Card */}
+            <div className="journey-dialogue-card">
+              {walkPhase <= 1 && (
+                <>
+                  <div className="dialogue-row parent">
+                    <span className="avatar">🧔</span>
+                    <div><strong>Dad:</strong> “Here’s the Central Glass Lift! The call button is green. Let’s step inside!”</div>
+                  </div>
+                  <div className="dialogue-row girl">
+                    <span className="avatar">👧</span>
+                    <div><strong>Maya:</strong> “Look, the doors are opening! Leo, hurry into the elevator!”</div>
+                  </div>
+                </>
+              )}
+              {walkPhase === 2 || walkPhase === 3 ? (
+                <>
+                  <div className="dialogue-row boy">
+                    <span className="avatar">👦</span>
+                    <div><strong>Leo:</strong> “We’re going up!! Look at the whole mall outside the glass! Level 1 shops are right below us!”</div>
+                  </div>
+                  <div className="dialogue-row girl">
+                    <span className="avatar">👧</span>
+                    <div><strong>Maya:</strong> “Level 2 is right at the top! I can see the lights of the arcade!”</div>
+                  </div>
+                </>
+              ) : null}
+              {walkPhase >= 4 && (
+                <>
                   <div className="dialogue-row boy excited">
                     <span className="avatar">👦</span>
-                    <div>
-                      <strong>Leo (Jumping and pointing at the machine):</strong>
-                      <p>“DAD LOOK RIGHT IN FRONT OF US!! The Play Area! That giant glowing Impossible Vending Machine! CAN WE PLAY PLEASE, CAN WE PLEASE?!”</p>
-                    </div>
+                    <div><strong>Leo (Jumping and pointing at the machine):</strong> “DAD! The doors opened and we’re here! LOOK AT THE GIANT VENDING MACHINE! CAN WE PLAY PLEASE?!”</div>
                   </div>
                   <div className="dialogue-row girl excited">
                     <span className="avatar">👧</span>
-                    <div>
-                      <strong>Maya (Holding up her shiny gold coin):</strong>
-                      <p>“Look at the spinning rainbow coils and mystery boxes! Dad, here’s our lucky coin! Let’s walk up to the machine right now!”</p>
-                    </div>
+                    <div><strong>Maya (Holding up her shiny gold coin):</strong> “I’ve got our lucky coin ready right at the coin slot! Dad, let’s insert it and pick our gift topic!”</div>
                   </div>
                   <div className="dialogue-row parent">
                     <span className="avatar">🧔</span>
-                    <div>
-                      <strong>Dad (Smiling):</strong>
-                      <p>“We made it! Let’s step up to the glass, choose our favorite gift topic, and insert the coin!”</p>
-                    </div>
+                    <div><strong>Dad:</strong> “We arrived! All tasks complete. Let’s step up to the glass and insert the coin!”</div>
                   </div>
-                </div>
+                </>
+              )}
+            </div>
 
-                <div className="journey-actions">
-                  <button
-                    type="button"
-                    className="journey-btn primary big-action"
-                    onClick={handleStepToMachine}
-                  >
-                    <span>Walk Up to the Vending Machine & Insert Coin!</span> 🎰 ✨ →
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* FINAL ACTION BUTTON (Enabled when arrived at machine) */}
+            <div className="journey-actions">
+              <button
+                type="button"
+                className="journey-btn primary big-action"
+                onClick={handleStepToMachine}
+              >
+                <span>Step Up to the Vending Machine & Insert Coin!</span> 🎰 ✨ →
+              </button>
+            </div>
           </div>
         )}
       </div>

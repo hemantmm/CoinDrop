@@ -1665,5 +1665,26 @@ h1 {
   transform-origin: bottom center;
 }
 
+/* Grand Mall Atrium & Lift Integrated Canvas */
+.mall-grand-atrium-canvas {
+  background: #030816;
+  border: 1.5px solid rgba(0, 245, 255, 0.35);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.8), 0 12px 32px rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+.mall-grand-svg {
+  width: 100%;
+  height: auto;
+  min-height: 280px;
+  display: block;
+}
+
+.svg-cabin-doors rect {
+  transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+
 
 
