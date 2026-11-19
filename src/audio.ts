@@ -178,6 +178,59 @@ export function playCoinPickup(): void {
   tone(ctx, now + 0.02, 2400, 0.07, "sine", 0.06, ctx.destination);
 }
 
+export function playEngineStart(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  tone(ctx, now, 110, 0.35, "sine", 0.08, ctx.destination);
+  tone(ctx, now + 0.08, 164.81, 0.4, "sine", 0.07, ctx.destination);
+  tone(ctx, now + 0.16, 220, 0.45, "triangle", 0.06, ctx.destination);
+  tone(ctx, now + 0.24, 329.63, 0.5, "sine", 0.05, ctx.destination);
+}
+
+export function playCarLock(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  tone(ctx, now, 2200, 0.04, "sine", 0.08, ctx.destination);
+  tone(ctx, now + 0.09, 2600, 0.06, "sine", 0.09, ctx.destination);
+}
+
+export function playParkingBeep(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  tone(ctx, now, 1800, 0.05, "sine", 0.05, ctx.destination);
+  tone(ctx, now + 0.1, 1800, 0.05, "sine", 0.05, ctx.destination);
+}
+
+export function playNavChime(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  tone(ctx, now, 659.25, 0.14, "sine", 0.07, ctx.destination);
+  tone(ctx, now + 0.10, 830.61, 0.22, "sine", 0.07, ctx.destination);
+}
+
+export function playMallFanfare(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const freqs = [523.25, 659.25, 783.99, 1046.5];
+  freqs.forEach((f, i) => {
+    tone(ctx, now + i * 0.07, f, 0.25, "sine", 0.06, ctx.destination);
+    tone(ctx, now + i * 0.07 + 0.02, f * 1.5, 0.12, "triangle", 0.025, ctx.destination);
+  });
+}
+
+export function playElevatorDing(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  tone(ctx, now, 1046.5, 0.35, "sine", 0.09, ctx.destination);
+  tone(ctx, now + 0.16, 783.99, 0.5, "sine", 0.08, ctx.destination);
+}
+
 export function startPlanet(patch: SoundPayload): void {
   stopPlanet();
   const ctx = getContext();

@@ -15,6 +15,7 @@ import { Cabinet } from "./ui/Cabinet";
 import { Moment, RealityOverlay, Receipt } from "./ui/Receipt";
 import { StockBoard } from "./ui/StockBoard";
 import { KidsCompanion } from "./ui/KidsCompanion";
+import { FamilyJourney } from "./ui/FamilyJourney";
 
 const VEND_MS = 2200;
 const REALITY_MS = 5000;
@@ -70,8 +71,26 @@ export function App() {
   const [selectedTopic, setSelectedTopic] = useState<GiftTopic>("technology");
   const [topicBounce, setTopicBounce] = useState(0);
   const [canShare, setCanShare] = useState(false);
+  const [showJourney, setShowJourney] = useState(() => {
+    if (starting.current) return false;
+    try {
+      return sessionStorage.getItem("vm-journey-seen-v3") !== "1";
+    } catch {
+      return true;
+    }
+  });
   const timers = useRef<number[]>([]);
   const copyTimer = useRef<number | null>(null);
+
+  const handleCompleteJourney = () => {
+    try {
+      sessionStorage.setItem("vm-journey-seen-v3", "1");
+    } catch {
+      /* ignore */
+    }
+    setShowJourney(false);
+    setTopicBounce((c) => c + 1);
+  };
 
   const chooseTopic = (next: GiftTopic) => {
     if (selectedTopic === next) return;
@@ -300,6 +319,14 @@ export function App() {
             <div className="kicker-row">
               <p className="kicker">Standing with the kids</p>
               <span className="kids-status-pill">👧 Maya & 👦 Leo at the glass</span>
+              <button
+                type="button"
+                className="journey-trigger-btn"
+                onClick={() => setShowJourney(true)}
+                title="Experience the family car trip from home to the mall!"
+              >
+                🚗 <span>Family Mall Trip</span>
+              </button>
             </div>
             <h1>The Impossible Vending Machine</h1>
           </div>
@@ -442,6 +469,7 @@ export function App() {
           onOpen={(seed) => show(generate(seed), "instant")}
         />
       </aside>
+      {showJourney ? <FamilyJourney onComplete={handleCompleteJourney} /> : null}
     </div>
   );
 }
