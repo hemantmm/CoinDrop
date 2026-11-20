@@ -68,11 +68,31 @@ export function KidsCompanion({ topic, phase, product, onNudge }: Props) {
       sub: "Bouncing up and down with both hands on the glass",
     };
   } else if (phase === "revealed" && product) {
-    activeSpeech = {
-      speaker: "Both",
-      text: `WE GOT IT!! Dad, look, it's the ${product.title}! Can I open the flap?!`,
-      sub: "Reaching down towards the dispensing flap with huge smiles",
-    };
+    if (product.rarity === "impossible") {
+      activeSpeech = {
+        speaker: "Both",
+        text: "DAD WHAT'S HAPPENING TO THE MACHINE?! THE WHOLE ROOM IS FLOATING INTO SPACE!! LOOK AT THE SCREEN!!",
+        sub: "Jumping in utter astonishment as reality glitches around the glowing cosmic anomaly",
+      };
+    } else if (product.rarity === "legendary") {
+      activeSpeech = {
+        speaker: "Both",
+        text: `NO WAY!! DAD LOOK AT THE GOLDEN LIGHT BEAMS!! IT'S A 1-OF-1 LEGENDARY!! WE ACTUALLY GOT THE ${product.title.toUpperCase()}!!`,
+        sub: "Hugging each other and pointing at the glorious golden rays radiating across the case",
+      };
+    } else if (product.rarity === "rare") {
+      activeSpeech = {
+        speaker: "Leo",
+        text: `WHOA! Look at the electric blue sparkles glowing around it!! Dad, it's hovering in the air! That's a RARE one!!`,
+        sub: "Maya: 'The aura is so pretty!!' · Eyes wide watching the swirling cyber particles",
+      };
+    } else {
+      activeSpeech = {
+        speaker: "Maya",
+        text: `Yay, the capsule popped open! Dad, look at our ${product.title}! Can I hold it in the car?!`,
+        sub: "Smiling happily as the clean capsule lid rests neatly on the tray",
+      };
+    }
   }
 
   const handleNudge = () => {

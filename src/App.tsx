@@ -10,9 +10,9 @@ import { Crowd } from "./scene/Crowd";
 import { Gallery, Machine, type Phase } from "./scene/Machine";
 import { WorldCopy } from "./scene/Labels";
 import { Reality } from "./scene/Reality";
-import { claimSlot, GIFT_TOPICS, todayStock, type DayStock, type GiftTopic } from "./stock";
+import { claimSlot, GIFT_TOPICS, todayStock, type DayStock, type GiftTopic, type StockSlot } from "./stock";
 import { Cabinet } from "./ui/Cabinet";
-import { Moment, RealityOverlay, Receipt } from "./ui/Receipt";
+import { FullScreenScreenshotOverlay, Moment, RealityOverlay, Receipt } from "./ui/Receipt";
 import { StockBoard } from "./ui/StockBoard";
 import { KidsCompanion } from "./ui/KidsCompanion";
 import { FamilyJourney } from "./ui/FamilyJourney";
@@ -69,6 +69,8 @@ export function App() {
   const handed = useRef<string | null>(null);
   const [stock, setStock] = useState<DayStock>(() => todayStock());
   const [selectedTopic, setSelectedTopic] = useState<GiftTopic>("technology");
+  const [targetedSlotIndex, setTargetedSlotIndex] = useState<number | null>(null);
+  const [isFullScreenTakeover, setIsFullScreenTakeover] = useState(false);
   const [topicBounce, setTopicBounce] = useState(0);
   const [canShare, setCanShare] = useState(false);
   const [showJourney, setShowJourney] = useState(() => {
@@ -145,6 +147,9 @@ export function App() {
     const finishReveal = () => {
       setPhase("revealed");
       setMark(performance.now());
+      if (next.rarity === "impossible") {
+        setIsFullScreenTakeover(true);
+      }
       if (next.type === "sound" && next.payload.kind === "sound" && mode === "vend") {
         startPlanet(next.payload);
         setListening(true);
@@ -194,13 +199,20 @@ export function App() {
   };
 
   const takeNext = () => {
-    const available = stock.slots.filter((item) => !item.claimed && item.topic === selectedTopic);
-    if (busy || available.length === 0) return;
-    const slot = available[Math.floor(Math.random() * available.length)];
+    let slot: StockSlot | undefined;
+    if (targetedSlotIndex !== null) {
+      slot = stock.slots.find((item) => item.index === targetedSlotIndex && !item.claimed);
+    }
+    if (!slot) {
+      const available = stock.slots.filter((item) => !item.claimed && item.topic === selectedTopic);
+      if (busy || available.length === 0) return;
+      slot = available[Math.floor(Math.random() * available.length)];
+    }
     if (!slot) return;
     claimSlot(slot.index);
     setStock(todayStock());
     setCabinet(remember(slot.product));
+    setTargetedSlotIndex(null);
     show(slot.product, "vend");
   };
 
@@ -312,7 +324,12 @@ export function App() {
         });
 
   return (
-    <div className="shell" data-rarity={product?.rarity ?? "none"} data-phase={phase} data-topic={selectedTopic}>
+    <div
+      className={`shell ${isFullScreenTakeover ? "fullscreen-active" : ""}`}
+      data-rarity={product?.rarity ?? "none"}
+      data-phase={phase}
+      data-topic={selectedTopic}
+    >
       <main className="main">
         <header className="top">
           <div>
@@ -349,7 +366,13 @@ export function App() {
               gl.domElement.style.touchAction = "none";
             }}
           >
-            <Gallery phase={phase} sky={sky} topic={selectedTopic}>
+            <Gallery
+              phase={phase}
+              sky={sky}
+              topic={selectedTopic}
+              rarity={product?.rarity ?? null}
+              fullScreen={isFullScreenTakeover}
+            >
               <Machine
                 phase={phase}
                 vendStarted={mark}
@@ -395,6 +418,12 @@ export function App() {
                 setMoment(false);
                 handOff(product.seed);
               }}
+            />
+          ) : null}
+          {isFullScreenTakeover && product ? (
+            <FullScreenScreenshotOverlay
+              product={product}
+              onExit={() => setIsFullScreenTakeover(false)}
             />
           ) : null}
         </div>
@@ -453,7 +482,11 @@ export function App() {
         </div>
       </main>
       <aside className="side">
-        <StockBoard slots={topicStock} />
+        <StockBoard
+          slots={topicStock}
+          selectedSlotIndex={targetedSlotIndex}
+          onSelectSlot={(idx) => setTargetedSlotIndex(idx)}
+        />
         <Receipt
           product={phase === "idle" || phase === "vending" ? null : product}
           copied={copied}
@@ -462,6 +495,7 @@ export function App() {
           onShare={() => void share()}
           onToggleSound={toggleSound}
           onReplay={replay}
+          onOpenScreenshot={() => setIsFullScreenTakeover(true)}
         />
         <Cabinet
           items={cabinet}

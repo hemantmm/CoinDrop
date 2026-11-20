@@ -106,29 +106,87 @@ export function playClunk(): void {
   click(ctx, now + 1.45, 320, 0.1);
 }
 
-const CHORDS: Record<Rarity, number[]> = {
-  common: [392, 493.88],
-  uncommon: [392, 493.88, 587.33],
-  rare: [329.63, 415.3, 493.88, 659.25],
-  legendary: [261.63, 329.63, 392, 523.25],
-  impossible: [233.08, 311.13, 369.99, 466.16, 622.25],
-};
-
-export function playStinger(rarity: Rarity): void {
+export function playCommonReveal(): void {
   const ctx = getContext();
   if (!ctx) return;
   const now = ctx.currentTime;
-  const chord = CHORDS[rarity];
-  const duration = rarity === "impossible" ? 1.8 : rarity === "legendary" ? 1.35 : 0.7;
-  const peak = rarity === "impossible" ? 0.09 : rarity === "legendary" ? 0.08 : 0.06;
-  chord.forEach((frequency, index) => {
-    tone(ctx, now + index * 0.012, frequency, duration, "sine", peak, ctx.destination);
-    if (rarity === "legendary" || rarity === "impossible") {
-      tone(ctx, now + 0.22, frequency * 2, duration * 0.7, "triangle", peak * 0.35, ctx.destination);
-    }
+  click(ctx, now, 380, 0.12);
+  click(ctx, now + 0.04, 520, 0.09);
+  tone(ctx, now + 0.08, 440, 0.22, "sine", 0.05, ctx.destination);
+  tone(ctx, now + 0.2, 554.37, 0.35, "sine", 0.06, ctx.destination);
+}
+
+export function playRareShimmer(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const notes = [587.33, 739.99, 880, 1108.73, 1318.51, 1661.22];
+  notes.forEach((freq, idx) => {
+    tone(ctx, now + idx * 0.055, freq, 0.38, "sine", 0.065, ctx.destination);
+    tone(ctx, now + idx * 0.055 + 0.015, freq * 1.5, 0.24, "triangle", 0.03, ctx.destination);
   });
-  if (rarity === "impossible") {
-    tone(ctx, now + 0.55, 932.33, 1.1, "sine", 0.05, ctx.destination);
+  click(ctx, now + 0.35, 1200, 0.05);
+}
+
+export function playLegendaryFanfare(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const fanfare = [
+    { freq: 261.63, at: 0, dur: 0.22 },
+    { freq: 392.00, at: 0.12, dur: 0.25 },
+    { freq: 523.25, at: 0.24, dur: 0.3 },
+    { freq: 659.25, at: 0.38, dur: 0.35 },
+    { freq: 783.99, at: 0.52, dur: 0.45 },
+    { freq: 1046.50, at: 0.68, dur: 1.1 },
+  ];
+  fanfare.forEach((note) => {
+    tone(ctx, now + note.at, note.freq, note.dur, "triangle", 0.08, ctx.destination);
+    tone(ctx, now + note.at, note.freq * 1.002, note.dur, "sine", 0.07, ctx.destination);
+    tone(ctx, now + note.at + 0.01, note.freq * 2, note.dur * 0.6, "sine", 0.03, ctx.destination);
+  });
+  const glissando = [523.25, 659.25, 783.99, 987.77, 1046.50, 1318.51, 1567.98, 2093.00];
+  glissando.forEach((f, i) => {
+    tone(ctx, now + 0.8 + i * 0.045, f, 0.32, "sine", 0.04, ctx.destination);
+  });
+}
+
+export function playImpossibleMalfunction(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  click(ctx, now, 120, 0.2);
+  click(ctx, now + 0.06, 880, 0.15);
+  click(ctx, now + 0.12, 340, 0.18);
+  click(ctx, now + 0.18, 1400, 0.14);
+  click(ctx, now + 0.28, 220, 0.2);
+
+  const dropOsc = ctx.createOscillator();
+  const dropAmp = ctx.createGain();
+  dropOsc.type = "sawtooth";
+  dropOsc.frequency.setValueAtTime(680, now + 0.05);
+  dropOsc.frequency.exponentialRampToValueAtTime(55, now + 0.8);
+  dropAmp.gain.setValueAtTime(0.0001, now + 0.05);
+  dropAmp.gain.exponentialRampToValueAtTime(0.12, now + 0.12);
+  dropAmp.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
+  dropOsc.connect(dropAmp).connect(ctx.destination);
+  dropOsc.start(now + 0.05);
+  dropOsc.stop(now + 0.9);
+
+  tone(ctx, now + 0.45, 46.25, 1.8, "sine", 0.14, ctx.destination);
+  tone(ctx, now + 0.6, 932.33, 1.4, "sine", 0.06, ctx.destination);
+  tone(ctx, now + 0.7, 1244.5, 1.6, "triangle", 0.05, ctx.destination);
+}
+
+export function playStinger(rarity: Rarity): void {
+  if (rarity === "common" || rarity === "uncommon") {
+    playCommonReveal();
+  } else if (rarity === "rare") {
+    playRareShimmer();
+  } else if (rarity === "legendary") {
+    playLegendaryFanfare();
+  } else if (rarity === "impossible") {
+    playImpossibleMalfunction();
   }
 }
 

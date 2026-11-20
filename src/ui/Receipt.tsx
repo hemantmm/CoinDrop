@@ -105,6 +105,80 @@ export function CreatureLabel({
   );
 }
 
+export function FullScreenScreenshotOverlay({
+  product,
+  onExit,
+}: {
+  product: Product;
+  onExit: () => void;
+}) {
+  const [cleanView, setCleanView] = useState(false);
+  const [captured, setCaptured] = useState(false);
+
+  const takeScreenshot = () => {
+    try {
+      const canvas = document.querySelector("canvas");
+      if (canvas) {
+        const link = document.createElement("a");
+        link.download = `impossible-vm-${product.rarity}-${product.serial}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+        setCaptured(true);
+        setTimeout(() => setCaptured(false), 2000);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <div
+      className={`fullscreen-hud ${cleanView ? "clean-mode" : ""}`}
+      onClick={(e) => {
+        // Toggle clean view on clicking empty canvas space
+        if (e.target === e.currentTarget) {
+          setCleanView((v) => !v);
+        }
+      }}
+    >
+      <header className="fs-header">
+        <div className="fs-badge-group">
+          <span className={`fs-rarity-pill pill-${product.rarity}`}>
+            {product.rarity === "impossible"
+              ? "🌌 REALITY BREACH // IMPOSSIBLE"
+              : product.rarity === "legendary"
+                ? "✦ LEGENDARY 1 OF 1 COLLECTIBLE ✦"
+                : `✧ ${product.rarity.toUpperCase()} FIND ✧`}
+          </span>
+          <span className="fs-serial">{product.serial}</span>
+        </div>
+        <h1 className="fs-title">{product.title}</h1>
+        <p className="fs-desc">{product.line}</p>
+      </header>
+
+      <footer className="fs-footer">
+        <div className="fs-actions">
+          <button type="button" className="fs-btn primary" onClick={takeScreenshot}>
+            {captured ? "✓ Saved to Photos" : "📸 Capture Screenshot"}
+          </button>
+          <button
+            type="button"
+            className="fs-btn secondary"
+            onClick={() => setCleanView((v) => !v)}
+            title="Hide all UI for a pristine screenshot"
+          >
+            {cleanView ? "Show Details" : "👁 Clean View"}
+          </button>
+          <button type="button" className="fs-btn ghost" onClick={onExit}>
+            ✕ Return to Mall
+          </button>
+        </div>
+        <p className="fs-hint">Tip: Click anywhere or use Clean View to hide all buttons for wallpaper photos.</p>
+      </footer>
+    </div>
+  );
+}
+
 export function Receipt({
   product,
   copied,
@@ -113,6 +187,7 @@ export function Receipt({
   onShare,
   onToggleSound,
   onReplay,
+  onOpenScreenshot,
 }: {
   product: Product | null;
   copied: boolean;
@@ -121,6 +196,7 @@ export function Receipt({
   onShare: () => void;
   onToggleSound: () => void;
   onReplay: () => void;
+  onOpenScreenshot?: () => void;
 }) {
   if (!product) {
     return (
@@ -141,17 +217,30 @@ export function Receipt({
     );
   }
 
-  return (
-    <section className="receipt" data-rarity={product.rarity}>
+  const isLegendary = product.rarity === "legendary";
+  const isImpossible = product.rarity === "impossible";
+  const isRare = product.rarity === "rare";
+
+  const cardContent = (
+    <>
       <div className="receipt-top">
-        <p className="kicker" style={{ color: RARITY_COLOR[product.rarity] }}>
-          {product.rarity}
-        </p>
+        <div className="receipt-tag-group">
+          <p className="kicker" style={{ color: RARITY_COLOR[product.rarity] }}>
+            {product.rarity}
+          </p>
+          {isLegendary && <span className="legendary-crest">★ 1 OF 1 MINT</span>}
+          {isImpossible && <span className="impossible-anomaly-tag">⚠ ANOMALY DETECTED</span>}
+        </div>
         <p className="serial">{product.serial}</p>
       </div>
-      {(product.rarity === "legendary" || product.rarity === "impossible") && (
-        <p className={`stamp stamp-${product.rarity}`}>{product.rarity}</p>
+
+      {isImpossible && (
+        <div className="malfunction-notice">
+          <strong>MACHINE MALFUNCTION DETECTED</strong>
+          <small>Reality parameters corrupted. Item defies local space-time.</small>
+        </div>
       )}
+
       <h2>{product.title}</h2>
       <p className="type">{TYPE_LABEL[product.type]}</p>
       <p className="line">{product.line}</p>
@@ -160,7 +249,13 @@ export function Receipt({
           <li key={trait}>{trait}</li>
         ))}
       </ul>
+
       <div className="actions">
+        {onOpenScreenshot && (
+          <button type="button" className="screenshot-trigger-btn" onClick={onOpenScreenshot}>
+            📸 3D Screenshot View
+          </button>
+        )}
         <button type="button" onClick={onCopy}>
           {copied ? "Copied" : "Copy link"}
         </button>
@@ -178,6 +273,35 @@ export function Receipt({
           </button>
         ) : null}
       </div>
+    </>
+  );
+
+  if (isLegendary) {
+    return (
+      <div className="legendary-collectible-wrapper">
+        <div className="legendary-gold-corners top-left">✦</div>
+        <div className="legendary-gold-corners top-right">✦</div>
+        <div className="legendary-gold-corners bottom-left">✦</div>
+        <div className="legendary-gold-corners bottom-right">✦</div>
+        <section className="receipt legendary-collectible-frame" data-rarity="legendary">
+          <div className="legendary-holo-sheen" aria-hidden="true" />
+          {cardContent}
+        </section>
+      </div>
+    );
+  }
+
+  if (isRare) {
+    return (
+      <section className="receipt rare-glow-frame" data-rarity="rare">
+        {cardContent}
+      </section>
+    );
+  }
+
+  return (
+    <section className="receipt common-frame" data-rarity={product.rarity}>
+      {cardContent}
     </section>
   );
 }

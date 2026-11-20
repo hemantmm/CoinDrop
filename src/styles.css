@@ -1685,6 +1685,384 @@ h1 {
   transition: transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ============================================================
+   RARITY PRESENTATION SUITE & FULL-SCREEN SCREENSHOT TAKEOVER
+   ============================================================ */
+
+/* Fullscreen Takeover Mode */
+.shell.fullscreen-active .top,
+.shell.fullscreen-active .controls,
+.shell.fullscreen-active .side,
+.shell.fullscreen-active .kids-companion {
+  display: none !important;
+}
+
+.shell.fullscreen-active .stage {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 100 !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  max-width: none !important;
+}
+
+.fullscreen-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(20px, 4vw, 40px);
+  pointer-events: none;
+  background: radial-gradient(circle at center, transparent 40%, rgba(2, 4, 10, 0.65) 90%);
+}
+
+.fullscreen-hud * {
+  pointer-events: auto;
+}
+
+.fullscreen-hud.clean-mode .fs-header,
+.fullscreen-hud.clean-mode .fs-footer {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
+}
+
+.fs-header {
+  max-width: min(700px, 90vw);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.fs-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.fs-rarity-pill {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 99px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.fs-rarity-pill.pill-impossible {
+  background: rgba(191, 90, 242, 0.22);
+  color: #e7b4ff;
+  border: 1px solid rgba(191, 90, 242, 0.7);
+  box-shadow: 0 0 20px rgba(191, 90, 242, 0.6);
+  animation: neon-pulse 1.8s ease-in-out infinite;
+}
+
+.fs-rarity-pill.pill-legendary {
+  background: rgba(255, 215, 0, 0.22);
+  color: #ffd700;
+  border: 1px solid rgba(255, 215, 0, 0.8);
+  box-shadow: 0 0 22px rgba(255, 215, 0, 0.6);
+}
+
+.fs-rarity-pill.pill-rare {
+  background: rgba(0, 245, 255, 0.22);
+  color: #00f5ff;
+  border: 1px solid rgba(0, 245, 255, 0.7);
+  box-shadow: 0 0 16px rgba(0, 245, 255, 0.5);
+}
+
+.fs-serial {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.1em;
+}
+
+.fs-title {
+  font-size: clamp(28px, 4.5vw, 52px);
+  font-weight: 700;
+  color: #ffffff;
+  margin: 6px 0 8px;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.85);
+  line-height: 1.1;
+}
+
+.fs-desc {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.5;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.85);
+  margin: 0;
+}
+
+.fs-footer {
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.fs-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.fs-btn {
+  padding: 11px 22px;
+  border-radius: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.fs-btn.primary {
+  background: linear-gradient(135deg, #ffd700, #ffae00);
+  color: #0d0a02;
+  border: none;
+  box-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
+}
+
+.fs-btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 35px rgba(255, 215, 0, 0.85);
+}
+
+.fs-btn.secondary {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.fs-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.fs-btn.ghost {
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+}
+
+.fs-btn.ghost:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.fs-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: var(--mono);
+  margin: 0;
+}
+
+/* Legendary Collectible Frame */
+.legendary-collectible-wrapper {
+  position: relative;
+  margin: 8px 0;
+  padding: 2px;
+}
+
+.legendary-gold-corners {
+  position: absolute;
+  z-index: 5;
+  color: #ffd700;
+  font-size: 15px;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.9);
+  pointer-events: none;
+}
+.legendary-gold-corners.top-left { top: -6px; left: -6px; }
+.legendary-gold-corners.top-right { top: -6px; right: -6px; }
+.legendary-gold-corners.bottom-left { bottom: -6px; left: -6px; }
+.legendary-gold-corners.bottom-right { bottom: -6px; right: -6px; }
+
+.legendary-collectible-frame {
+  border: 2px solid #ffd700 !important;
+  border-radius: 14px !important;
+  position: relative !important;
+  overflow: hidden !important;
+  background: linear-gradient(145deg, rgba(32, 25, 10, 0.96), rgba(15, 12, 5, 0.98)) !important;
+  box-shadow: 0 0 35px rgba(255, 215, 0, 0.3), inset 0 0 25px rgba(255, 215, 0, 0.12) !important;
+}
+
+.legendary-holo-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.22;
+  background: linear-gradient(115deg, transparent 20%, rgba(255, 215, 0, 0.7) 35%, rgba(0, 245, 255, 0.7) 50%, rgba(255, 45, 120, 0.7) 65%, transparent 80%);
+  background-size: 250% 250%;
+  animation: holo-shine 4.5s ease-in-out infinite;
+}
+
+@keyframes holo-shine {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
+}
+
+.legendary-crest {
+  font-size: 10px;
+  font-family: var(--mono);
+  letter-spacing: 0.16em;
+  font-weight: 700;
+  color: #120e03;
+  background: linear-gradient(90deg, #ffd700, #ffe57f);
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-left: 8px;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
+  display: inline-block;
+}
+
+/* Rare Glow Frame */
+.rare-glow-frame {
+  border: 1.5px solid #00f5ff !important;
+  border-radius: 12px !important;
+  background: linear-gradient(145deg, rgba(4, 16, 28, 0.94), rgba(12, 6, 26, 0.96)) !important;
+  box-shadow: 0 0 28px rgba(0, 245, 255, 0.22), inset 0 0 16px rgba(191, 90, 242, 0.16) !important;
+}
+
+/* Common Frame */
+.common-frame {
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 12px !important;
+  background: rgba(12, 16, 22, 0.88) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Screenshot trigger button */
+.screenshot-trigger-btn {
+  background: linear-gradient(90deg, rgba(255, 215, 0, 0.2), rgba(0, 245, 255, 0.2)) !important;
+  border: 1px solid rgba(255, 215, 0, 0.6) !important;
+  color: #ffd700 !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.5) !important;
+}
+.screenshot-trigger-btn:hover {
+  background: linear-gradient(90deg, rgba(255, 215, 0, 0.35), rgba(0, 245, 255, 0.35)) !important;
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.6) !important;
+  transform: translateY(-1px);
+}
+
+/* Malfunction Notice for Impossible */
+.malfunction-notice {
+  background: rgba(231, 76, 60, 0.16);
+  border: 1px solid rgba(231, 76, 60, 0.55);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 10px 0;
+  color: #ff6b6b;
+  font-family: var(--mono);
+}
+.malfunction-notice strong {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  margin-bottom: 2px;
+}
+.malfunction-notice small {
+  font-size: 10px;
+  color: #ffa8a8;
+  letter-spacing: 0.04em;
+}
+.impossible-anomaly-tag {
+  font-size: 9px;
+  font-family: var(--mono);
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  color: #ffffff;
+  background: #e74c3c;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-left: 8px;
+  animation: fault-blink 0.25s steps(2) infinite;
+}
+
+/* Rarity Filter Row & Stock Targeting */
+.stock-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 2px 0 0;
+}
+.rarity-filter-row {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  margin-bottom: 6px;
+}
+.rarity-filter-chip {
+  font-size: 10px;
+  font-family: var(--mono);
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  white-space: nowrap;
+}
+.rarity-filter-chip:hover,
+.rarity-filter-chip.active {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+}
+
+.stock-item-row {
+  cursor: pointer;
+  padding: 7px 9px !important;
+  border-radius: 8px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.stock-item-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.stock-item-row.targeted {
+  background: rgba(0, 245, 255, 0.12) !important;
+  border: 1px solid #00f5ff !important;
+  box-shadow: 0 0 12px rgba(0, 245, 255, 0.3);
+}
+.stock-item-details {
+  flex: 1;
+  min-width: 0;
+}
+.stock-item-title-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.target-pill {
+  font-size: 9px;
+  font-family: var(--mono);
+  background: #00f5ff;
+  color: #030814;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.rarity-label {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
 
 
 

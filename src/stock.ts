@@ -11,7 +11,7 @@ type MallPrize = {
   detail: string;
   rarity: Rarity;
   color: string;
-  shape: "phone" | "laptop" | "watch" | "chocolate" | "buds" | "shoes";
+  shape: "phone" | "laptop" | "watch" | "chocolate" | "buds" | "shoes" | "anomaly";
 };
 
 export type GiftTopic = "technology" | "audio" | "snacks" | "style";
@@ -71,22 +71,29 @@ export const GIFT_TOPICS: GiftTopicInfo[] = [
 ];
 
 const PRIZES: MallPrize[] = [
-  { name: "iPhone", kind: "Phone", topic: "technology", detail: "A sealed phone. The kids are looking at it. Only your coin can take it.", rarity: "legendary", color: "#f5f5f7", shape: "phone" },
-  { name: "MacBook", kind: "Laptop", topic: "technology", detail: "A closed laptop, still in the sleeve.", rarity: "legendary", color: "#d7d7dc", shape: "laptop" },
-  { name: "Smartwatch", kind: "Wearable", topic: "technology", detail: "A steel smartwatch, charged and ready.", rarity: "rare", color: "#d9dde3", shape: "watch" },
-  { name: "Pocket Camera", kind: "Camera", topic: "technology", detail: "A tiny instant camera with one picture left inside.", rarity: "uncommon", color: "#d7d7dc", shape: "phone" },
-  { name: "Earbuds", kind: "Audio", topic: "audio", detail: "A boxed pair, still in the plastic.", rarity: "uncommon", color: "#eceae4", shape: "buds" },
-  { name: "Studio Headphones", kind: "Headphones", topic: "audio", detail: "Soft padded headphones, folded into their case.", rarity: "rare", color: "#6f8299", shape: "buds" },
-  { name: "Pocket Speaker", kind: "Speaker", topic: "audio", detail: "A little speaker ready to fill the room with your song.", rarity: "common", color: "#6a8c83", shape: "buds" },
-  { name: "Music Player", kind: "Player", topic: "audio", detail: "A pocket music player with a playlist already loaded.", rarity: "uncommon", color: "#e1bd73", shape: "phone" },
-  { name: "Chocolate", kind: "Sweet", topic: "snacks", detail: "A bar in gold foil.", rarity: "common", color: "#6b3e22", shape: "chocolate" },
-  { name: "Gummy Bears", kind: "Candy", topic: "snacks", detail: "A bright little bag of fruit gummies.", rarity: "common", color: "#e57954", shape: "chocolate" },
-  { name: "Cookie Box", kind: "Treat", topic: "snacks", detail: "Two warm cookies wrapped up for the road.", rarity: "uncommon", color: "#bd8650", shape: "chocolate" },
-  { name: "Popcorn", kind: "Snack", topic: "snacks", detail: "A tiny tub of freshly popped, buttery popcorn.", rarity: "common", color: "#f2cf68", shape: "chocolate" },
-  { name: "Sneakers", kind: "Shoes", topic: "style", detail: "One pair, tags still on.", rarity: "uncommon", color: "#f4f1ea", shape: "shoes" },
-  { name: "Sunglasses", kind: "Accessory", topic: "style", detail: "A pair of dark lenses in a polished case.", rarity: "rare", color: "#8d7860", shape: "watch" },
-  { name: "Cap", kind: "Accessory", topic: "style", detail: "A soft cap with a little embroidered star.", rarity: "common", color: "#b75d53", shape: "shoes" },
-  { name: "Backpack", kind: "Bag", topic: "style", detail: "A small canvas backpack with room for the important things.", rarity: "uncommon", color: "#58715d", shape: "laptop" },
+  // Technology
+  { name: "Pocket Camera", kind: "Camera", topic: "technology", detail: "A tiny retro camera with one picture left inside.", rarity: "common", color: "#9ca3af", shape: "phone" },
+  { name: "Smartwatch", kind: "Wearable", topic: "technology", detail: "A polished steel smartwatch with biometric sensors.", rarity: "rare", color: "#00f5ff", shape: "watch" },
+  { name: "Gold Edition iPhone", kind: "Flagship Phone", topic: "technology", detail: "Sealed gold titanium flagship. Maya and Leo are staring in pure disbelief.", rarity: "legendary", color: "#ffd700", shape: "phone" },
+  { name: "Quantum Singularity Device", kind: "Reality Anomaly", topic: "technology", detail: "A device that bends time and space around itself. The glass displays constellations from other galaxies.", rarity: "impossible", color: "#e7b4ff", shape: "anomaly" },
+
+  // Audio
+  { name: "Pocket Speaker", kind: "Speaker", topic: "audio", detail: "A compact travel speaker ready to fill the car with your song.", rarity: "common", color: "#6a8c83", shape: "buds" },
+  { name: "Studio Neon Headphones", kind: "Headphones", topic: "audio", detail: "Padded studio monitors with glowing acoustic trim.", rarity: "rare", color: "#bf5af2", shape: "buds" },
+  { name: "Gilded Hi-Fi Player", kind: "Hi-Fi Player", topic: "audio", detail: "Precision audiophile player carved from brushed brass. Golden acoustics.", rarity: "legendary", color: "#facc15", shape: "phone" },
+  { name: "Void Harmonic Resonator", kind: "Cosmic Audio", topic: "audio", detail: "Captures echoes from parallel timelines. Emits a hypnotic multidimensional hum.", rarity: "impossible", color: "#d946ef", shape: "anomaly" },
+
+  // Snacks
+  { name: "Milk Chocolate Bar", kind: "Sweet", topic: "snacks", detail: "A classic chocolate bar in a bright foil wrapper.", rarity: "common", color: "#6b3e22", shape: "chocolate" },
+  { name: "Artisan Macaron Box", kind: "Confection", topic: "snacks", detail: "Delicate lavender and pistachio macarons nestled in silk ribbon.", rarity: "rare", color: "#f472b6", shape: "chocolate" },
+  { name: "Pure 24K Gold Foil Truffle", kind: "Luxury Treat", topic: "snacks", detail: "A golden master confection wrapped in genuine edible 24k gold leaf.", rarity: "legendary", color: "#ffd700", shape: "chocolate" },
+  { name: "Infinite Starlight Confection", kind: "Celestial Candy", topic: "snacks", detail: "A crystalline prism filled with liquid stardust. It glows brighter the closer you look.", rarity: "impossible", color: "#c084fc", shape: "anomaly" },
+
+  // Style
+  { name: "Star Cap", kind: "Accessory", topic: "style", detail: "A soft cotton cap with a little embroidered star.", rarity: "common", color: "#b75d53", shape: "shoes" },
+  { name: "Designer Neon Sunglasses", kind: "Eyewear", topic: "style", detail: "Gradient polarized lenses with iridescent frames.", rarity: "rare", color: "#00ff88", shape: "watch" },
+  { name: "Golden Chronograph Watch", kind: "Luxury Timepiece", topic: "style", detail: "Heavy 18k solid gold links and diamond-cut bezels. A genuine heirloom.", rarity: "legendary", color: "#eab308", shape: "watch" },
+  { name: "Zero-Gravity Chrono-Sneakers", kind: "Dimensional Gear", topic: "style", detail: "Hovering 2 inches above the ground, these shoes warp gravity in their immediate perimeter.", rarity: "impossible", color: "#e879f9", shape: "anomaly" },
 ];
 
 export type StockSlot = {
