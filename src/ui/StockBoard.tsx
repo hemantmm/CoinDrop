@@ -72,8 +72,10 @@ export function StockBoard({
               <span className="dot" style={{ background: RARITY_COLOR[slot.product.rarity] }} />
               <div className="stock-item-details">
                 <div className="stock-item-title-line">
-                  <strong>{slot.product.title}</strong>
-                  {isSelected && <span className="target-pill">Targeted</span>}
+                  <strong>
+                    <span className="slot-code-badge">{slot.code}</span> {slot.product.title}
+                  </strong>
+                  {isSelected && <span className="target-pill">Selected</span>}
                 </div>
                 <small>
                   <span className="rarity-label" style={{ color: RARITY_COLOR[slot.product.rarity] }}>

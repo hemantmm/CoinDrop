@@ -2062,6 +2062,64 @@ h1 {
   font-weight: 600;
   text-transform: capitalize;
 }
+.slot-code-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  margin-right: 4px;
+  border-radius: 4px;
+  background: var(--theme-tag-bg);
+  color: var(--theme-accent);
+  border: 1px solid var(--theme-border);
+}
+.coin-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.coin-player-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-card-bg);
+  backdrop-filter: blur(8px);
+}
+.coin-player-pill {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 11px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background 150ms, color 150ms, border-color 150ms, transform 150ms;
+}
+.coin-player-pill:hover:not(:disabled) {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+}
+.coin-player-pill.active {
+  background: var(--theme-tag-bg);
+  color: var(--theme-accent);
+  border-color: var(--theme-accent);
+  font-weight: 600;
+}
+.coin-player-pill:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 
 
 

@@ -1,7 +1,20 @@
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { playClunk, playKidsCheer, playStinger, playTopicSelect, startPlanet, stopPlanet, unlockAudio } from "./audio";
+import {
+  playCapsulePop,
+  playClunk,
+  playCoinInsertDrop,
+  playFlapOpen,
+  playKeypadBeep,
+  playKidCoinCheer,
+  playKidsCheer,
+  playStinger,
+  playTopicSelect,
+  startPlanet,
+  stopPlanet,
+  unlockAudio,
+} from "./audio";
 import { loadCabinet, remember, shareUrl, type CabinetItem } from "./cabinet";
 import { generate, isHighRarity, type Product } from "./generate";
 import { displayLine, noteVisit, type Readout } from "./machine/personality";
@@ -10,14 +23,25 @@ import { Crowd } from "./scene/Crowd";
 import { Gallery, Machine, type Phase } from "./scene/Machine";
 import { WorldCopy } from "./scene/Labels";
 import { Reality } from "./scene/Reality";
-import { claimSlot, GIFT_TOPICS, todayStock, type DayStock, type GiftTopic, type StockSlot } from "./stock";
+import {
+  claimSlot,
+  COIL_CODES,
+  GIFT_TOPICS,
+  todayStock,
+  type CoinPlayer,
+  type DayStock,
+  type GiftTopic,
+  type PlayStep,
+  type StockSlot,
+} from "./stock";
 import { Cabinet } from "./ui/Cabinet";
 import { FullScreenScreenshotOverlay, Moment, RealityOverlay, Receipt } from "./ui/Receipt";
 import { StockBoard } from "./ui/StockBoard";
 import { KidsCompanion } from "./ui/KidsCompanion";
 import { FamilyJourney } from "./ui/FamilyJourney";
 
-const VEND_MS = 2200;
+const COIN_MS = 850;
+const VEND_MS = 3200;
 const REALITY_MS = 5000;
 const MOMENT_MS = 5000;
 
@@ -70,6 +94,13 @@ export function App() {
   const [stock, setStock] = useState<DayStock>(() => todayStock());
   const [selectedTopic, setSelectedTopic] = useState<GiftTopic>("technology");
   const [targetedSlotIndex, setTargetedSlotIndex] = useState<number | null>(null);
+  const [vendingSlotIndex, setVendingSlotIndex] = useState<number | null>(null);
+  const [coinPlayer, setCoinPlayer] = useState<CoinPlayer>("Dad");
+  const [playStep, setPlayStep] = useState<PlayStep>(() => (starting.current ? "revealed" : "need_coin"));
+  const [coinMark, setCoinMark] = useState(0);
+  const [typedCode, setTypedCode] = useState("");
+  const [isSuspenseHanging, setIsSuspenseHanging] = useState(false);
+  const [arrivalSeq, setArrivalSeq] = useState(1);
   const [isFullScreenTakeover, setIsFullScreenTakeover] = useState(false);
   const [topicBounce, setTopicBounce] = useState(0);
   const [canShare, setCanShare] = useState(false);
@@ -83,6 +114,12 @@ export function App() {
   });
   const timers = useRef<number[]>([]);
   const copyTimer = useRef<number | null>(null);
+  const targetedSlotRef = useRef<number | null>(null);
+  targetedSlotRef.current = targetedSlotIndex;
+  const typedCodeRef = useRef("");
+  typedCodeRef.current = typedCode;
+  const selectedTopicRef = useRef<GiftTopic>(selectedTopic);
+  selectedTopicRef.current = selectedTopic;
 
   const handleCompleteJourney = () => {
     try {
@@ -91,15 +128,28 @@ export function App() {
       /* ignore */
     }
     setShowJourney(false);
+    setArrivalSeq((s) => s + 1);
     setTopicBounce((c) => c + 1);
   };
 
   const chooseTopic = (next: GiftTopic) => {
     if (selectedTopic === next) return;
     setSelectedTopic(next);
+    setTargetedSlotIndex((cur) => {
+      if (cur === null) return null;
+      const slot = stock.slots.find((item) => item.index === cur);
+      return slot?.topic === next ? cur : null;
+    });
     setTopicBounce((c) => c + 1);
     unlockAudio();
     playTopicSelect(next);
+  };
+
+  const chooseCoinPlayer = (next: CoinPlayer) => {
+    setCoinPlayer(next);
+    unlockAudio();
+    if (next === "Dad") playCoinInsertDrop();
+    else playKidCoinCheer();
   };
 
   const handleNudgeKids = () => {
@@ -133,16 +183,12 @@ export function App() {
     setAdvance((count) => count + 1);
   };
 
-  const show = (next: Product, mode: "vend" | "instant") => {
-    clearTimers();
-    stopPlanet();
-    setListening(false);
-    setCopied(false);
-    setMoment(false);
-    setProduct(next);
+  const completeRevealFor = (next: Product, mode: "vend" | "instant") => {
     const url = new URL(window.location.href);
     url.searchParams.set("seed", next.seed);
     window.history.replaceState({}, "", url);
+    setCabinet(remember(next));
+    setPlayStep("revealed");
 
     const finishReveal = () => {
       setPhase("revealed");
@@ -167,53 +213,187 @@ export function App() {
     };
 
     if (mode === "vend") {
-      unlockAudio();
-      playClunk();
-      setPhase("vending");
-      setMark(performance.now());
-      later(VEND_MS, () => {
-        setCabinet(remember(next));
-        playStinger(next.rarity);
-        if (next.type === "reality") {
-          setPhase("reality");
-          setMark(performance.now());
-          later(REALITY_MS, () => {
-            setPhase("revealed");
-            handOff(next.seed);
-          });
-          return;
-        }
-        finishReveal();
-      });
-      return;
+      playStinger(next.rarity);
     }
-
-    setCabinet(remember(next));
     if (next.type === "reality") {
       setPhase("reality");
       setMark(performance.now());
-      later(REALITY_MS, () => setPhase("revealed"));
+      later(REALITY_MS, () => {
+        setPhase("revealed");
+        if (mode === "vend") handOff(next.seed);
+      });
       return;
     }
     finishReveal();
   };
 
-  const takeNext = () => {
-    let slot: StockSlot | undefined;
-    if (targetedSlotIndex !== null) {
-      slot = stock.slots.find((item) => item.index === targetedSlotIndex && !item.claimed);
+  const show = (next: Product, mode: "vend" | "instant") => {
+    clearTimers();
+    stopPlanet();
+    setListening(false);
+    setCopied(false);
+    setMoment(false);
+    setIsFullScreenTakeover(false);
+    setProduct(next);
+
+    if (mode === "vend") {
+      unlockAudio();
+      playClunk();
+      setPhase("vending");
+      setPlayStep("vending");
+      setMark(performance.now());
+      later(Math.round(VEND_MS * 0.5), () => setIsSuspenseHanging(true));
+      later(Math.round(VEND_MS * 0.68), () => setIsSuspenseHanging(false));
+      later(VEND_MS, () => {
+        setIsSuspenseHanging(false);
+        setPhase("idle");
+        setPlayStep("in_tray");
+      });
+      return;
     }
-    if (!slot) {
-      const available = stock.slots.filter((item) => !item.claimed && item.topic === selectedTopic);
-      if (busy || available.length === 0) return;
-      slot = available[Math.floor(Math.random() * available.length)];
-    }
-    if (!slot) return;
+
+    completeRevealFor(next, "instant");
+  };
+
+  const startVendSlot = (slot: StockSlot) => {
     claimSlot(slot.index);
     setStock(todayStock());
-    setCabinet(remember(slot.product));
+    setVendingSlotIndex(slot.index);
     setTargetedSlotIndex(null);
+    setTypedCode("");
+    setSelectedTopic(slot.topic);
     show(slot.product, "vend");
+  };
+
+  const resolveSlotToVend = (): StockSlot | undefined => {
+    const freshStock = todayStock();
+    const tIdx = targetedSlotRef.current;
+    if (tIdx !== null) {
+      const hit = freshStock.slots.find((item) => item.index === tIdx && !item.claimed);
+      if (hit) return hit;
+    }
+    if (typedCodeRef.current.length === 2) {
+      const hit = freshStock.slots.find((item) => item.code === typedCodeRef.current && !item.claimed);
+      if (hit) return hit;
+    }
+    const available = freshStock.slots.filter((item) => !item.claimed && item.topic === selectedTopicRef.current);
+    if (available.length > 0) {
+      return available[Math.floor(Math.random() * available.length)];
+    }
+    const anyAvailable = freshStock.slots.filter((item) => !item.claimed);
+    return anyAvailable[0];
+  };
+
+  const handleInsertCoin = () => {
+    if (playStep === "coin_entering" || playStep === "vending" || playStep === "in_tray" || phase === "reality" || moment) {
+      return;
+    }
+    const fresh = todayStock();
+    if (fresh.soldOut) return;
+
+    clearTimers();
+    stopPlanet();
+    setListening(false);
+    setMoment(false);
+    setIsFullScreenTakeover(false);
+    setVendingSlotIndex(null);
+    setPhase("idle");
+    setPlayStep("coin_entering");
+    setCoinMark(performance.now());
+    unlockAudio();
+    playCoinInsertDrop();
+    if (coinPlayer !== "Dad") playKidCoinCheer();
+
+    later(COIN_MS, () => {
+      // If user pre-selected a specific item (via shelf, StockBoard, or keypad), dispense it right away;
+      // otherwise let them pick a button/shelf item like a real vending machine!
+      const preIdx = targetedSlotRef.current;
+      const preCode = typedCodeRef.current;
+      const currentStock = todayStock();
+      const preSlot =
+        preIdx !== null
+          ? currentStock.slots.find((item) => item.index === preIdx && !item.claimed)
+          : preCode.length === 2
+            ? currentStock.slots.find((item) => item.code === preCode && !item.claimed)
+            : undefined;
+      if (preSlot) {
+        startVendSlot(preSlot);
+      } else {
+        setPlayStep("select_item");
+      }
+    });
+  };
+
+  const handleSelectSlot = (slotIndex: number) => {
+    const fresh = todayStock();
+    const slot = fresh.slots.find((item) => item.index === slotIndex);
+    if (!slot || slot.claimed) return;
+    unlockAudio();
+    playKeypadBeep(slot.code[0] ?? "A");
+    setSelectedTopic(slot.topic);
+    setTypedCode(slot.code);
+    setTargetedSlotIndex(slot.index);
+    if (playStep === "select_item") {
+      startVendSlot(slot);
+    }
+  };
+
+  const handleKeyPress = (key: string) => {
+    unlockAudio();
+    if (key === "CLR") {
+      setTypedCode("");
+      setTargetedSlotIndex(null);
+      return;
+    }
+    if (key === "VEND") {
+      if (playStep === "select_item") {
+        const slot = resolveSlotToVend();
+        if (slot) startVendSlot(slot);
+      } else if (playStep === "need_coin" || playStep === "revealed") {
+        handleInsertCoin();
+      }
+      return;
+    }
+    if (["A", "B", "C", "D"].includes(key)) {
+      setTypedCode(key);
+      const topicMap: Record<string, GiftTopic> = { A: "technology", B: "audio", C: "snacks", D: "style" };
+      if (topicMap[key]) setSelectedTopic(topicMap[key]);
+      return;
+    }
+    if (["1", "2", "3", "4"].includes(key)) {
+      const row = ["A", "B", "C", "D"].includes(typedCode) ? typedCode : COIL_CODES.find((_, idx) => stock.slots[idx]?.topic === selectedTopic)?.[0] ?? "A";
+      const code = `${row}${key}`;
+      setTypedCode(code);
+      const match = todayStock().slots.find((item) => item.code === code && !item.claimed);
+      if (match) {
+        setSelectedTopic(match.topic);
+        setTargetedSlotIndex(match.index);
+        if (playStep === "select_item") {
+          startVendSlot(match);
+        }
+      }
+    }
+  };
+
+  const handleCollect = () => {
+    if (playStep !== "in_tray" || !product) return;
+    unlockAudio();
+    playFlapOpen();
+    playCapsulePop();
+    completeRevealFor(product, "vend");
+  };
+
+  const handlePrimaryAction = () => {
+    if (playStep === "in_tray") {
+      handleCollect();
+      return;
+    }
+    if (playStep === "select_item") {
+      const slot = resolveSlotToVend();
+      if (slot) startVendSlot(slot);
+      return;
+    }
+    handleInsertCoin();
   };
 
   useEffect(() => {
@@ -289,13 +469,21 @@ export function App() {
   };
 
   const sky = product?.payload.kind === "reality" ? product.payload.sky : "#14110e";
-  const busy = phase === "vending" || phase === "reality" || moment;
+  const busy = playStep === "coin_entering" || phase === "vending" || phase === "reality" || moment;
   const topicStock = stock.slots.filter((item) => item.topic === selectedTopic);
   const availableGifts = topicStock.filter((item) => !item.claimed);
   const selectedGift = availableGifts[0] ?? null;
-  const showPlinth = phase === "revealed" && !moment;
+  const targetedSlot = targetedSlotIndex !== null ? stock.slots.find((item) => item.index === targetedSlotIndex && !item.claimed) ?? null : null;
+  const showPlinth = (phase === "revealed" || playStep === "revealed") && !moment;
   const impossibleKept = cabinet.some((item) => item.rarity === "impossible");
-  const closed = !selectedGift && phase !== "vending" && phase !== "reality";
+  const closed =
+    !selectedGift &&
+    playStep !== "coin_entering" &&
+    playStep !== "select_item" &&
+    playStep !== "vending" &&
+    playStep !== "in_tray" &&
+    phase !== "vending" &&
+    phase !== "reality";
   const readout: Readout = closed
     ? {
         label: "Closed",
@@ -303,25 +491,83 @@ export function App() {
         detail: stock.soldOut ? "Today's gifts are gone. Tomorrow the case will be full again." : `There are no ${GIFT_TOPICS.find((topic) => topic.id === selectedTopic)?.label.toLowerCase()} gifts left today.`,
         tone: "warn",
       }
-    : phase === "idle" && selectedGift
+    : playStep === "coin_entering"
       ? {
-          label: "Your pick",
-          text: "A surprise is waiting",
-          detail: `You chose ${GIFT_TOPICS.find((topic) => topic.id === selectedTopic)?.label}. Insert a coin and the machine will pick one of the ${availableGifts.length} gifts in this topic at random.`,
+          label: coinPlayer,
+          text: `${coinPlayer} is inserting the coin`,
+          detail: "Sliding the shiny coin into the slot on the right.",
           tone: "warn",
         }
-      : displayLine({
-          phase,
-          rarity: product?.rarity ?? null,
-          type: product?.type ?? null,
-          title: product?.title ?? null,
-          seed: product?.seed ?? null,
-          visits,
-          discoveries: cabinet.length,
-          impossibleKept,
-          vendStarted: mark,
-          now,
-        });
+      : playStep === "select_item"
+        ? {
+            label: "Credit $1",
+            text: typedCode
+              ? stock.slots.some((s) => s.code === typedCode && s.claimed)
+                ? `Coil ${typedCode} empty`
+                : `Code ${typedCode} entered`
+              : "Press a coil button (A1–D4)",
+            detail: "Tap any glowing prize inside the glass, or press the keypad on the right.",
+            tone: "warn",
+          }
+        : playStep === "vending" && isSuspenseHanging
+          ? {
+              label: "Edge hang",
+              text: "Balanced on the lip...",
+              detail: "Holding breath! The prize is teetering right over the shelf edge.",
+              tone: "warn",
+            }
+          : playStep === "in_tray"
+            ? {
+                label: "In tray",
+                text: "Push the bottom flap",
+                detail: "Your capsule hit the bottom chute! Tap the flap or capsule to open it.",
+                tone: "warn",
+              }
+            : phase === "idle" && targetedSlot
+              ? {
+                  label: `Coil ${targetedSlot.code}`,
+                  text: targetedSlot.product.title,
+                  detail: `Coil ${targetedSlot.code} selected. Let ${coinPlayer} insert a coin to dispense it.`,
+                  tone: "warn",
+                }
+              : phase === "idle" && selectedGift
+                ? {
+                    label: "Your pick",
+                    text: "A surprise is waiting",
+                    detail: `Drop the coin in the slot with ${coinPlayer}, then pick any coil A1–D4 inside the glass.`,
+                    tone: "warn",
+                  }
+                : displayLine({
+                    phase,
+                    rarity: product?.rarity ?? null,
+                    type: product?.type ?? null,
+                    title: product?.title ?? null,
+                    seed: product?.seed ?? null,
+                    visits,
+                    discoveries: cabinet.length,
+                    impossibleKept,
+                    vendStarted: mark,
+                    now,
+                  });
+
+  const actionDisabled =
+    busy ||
+    (playStep !== "in_tray" && playStep !== "select_item" && stock.soldOut) ||
+    (playStep === "need_coin" && !selectedGift && stock.soldOut);
+
+  const actionLabel = () => {
+    if (playStep === "coin_entering") return `${coinPlayer} inserting coin...`;
+    if (playStep === "vending" || phase === "vending") {
+      return isSuspenseHanging ? "Teetering on edge..." : "Coil turning...";
+    }
+    if (phase === "reality") return "Five seconds";
+    if (playStep === "in_tray") return "Grab & open prize!";
+    if (playStep === "select_item") return typedCode ? `Dispense ${typedCode}` : "Tap glass item or Kids' Pick";
+    if (stock.soldOut) return "Come back tomorrow";
+    if (!selectedGift && playStep === "need_coin") return "Choose another topic";
+    if (targetedSlot) return `${coinPlayer}: Coin for ${targetedSlot.code}`;
+    return product ? `${coinPlayer}: Insert another coin` : `${coinPlayer}: Insert a coin`;
+  };
 
   return (
     <div
@@ -375,19 +621,38 @@ export function App() {
             >
               <Machine
                 phase={phase}
+                playStep={playStep}
+                coinStarted={coinMark}
+                coinMs={COIN_MS}
                 vendStarted={mark}
                 vendMs={VEND_MS}
                 product={product}
-                canInsert={!busy && Boolean(selectedGift)}
-                onInsert={takeNext}
+                canInsert={!busy && !stock.soldOut}
+                onInsert={handleInsertCoin}
                 topic={selectedTopic}
-                stock={topicStock.map((slot) => ({
+                targetedSlotIndex={targetedSlotIndex}
+                vendingSlotIndex={vendingSlotIndex}
+                typedCode={typedCode}
+                coinPlayer={coinPlayer}
+                onSelectSlotIndex={handleSelectSlot}
+                onKeyPress={handleKeyPress}
+                onCollect={handleCollect}
+                stock={stock.slots.map((slot) => ({
                   shape: slot.shape,
                   color: slot.color,
                   claimed: slot.claimed,
+                  rarity: slot.product.rarity,
                 }))}
               />
-              <Crowd phase={phase} advance={advance} topicBounce={topicBounce} />
+              <Crowd
+                phase={phase}
+                advance={advance}
+                topicBounce={topicBounce}
+                playStep={playStep}
+                coinPlayer={coinPlayer}
+                isSuspenseHanging={isSuspenseHanging}
+                arrivalSeq={arrivalSeq}
+              />
               <WorldCopy
                 phase={phase}
                 product={product}
@@ -403,6 +668,9 @@ export function App() {
           <KidsCompanion
             topic={selectedTopic}
             phase={phase}
+            playStep={playStep}
+            coinPlayer={coinPlayer}
+            isSuspenseHanging={isSuspenseHanging}
             product={product}
             onNudge={handleNudgeKids}
           />
@@ -461,23 +729,34 @@ export function App() {
               <p>{stock.soldOut ? "Today's gifts are finished. Come back tomorrow for a new case." : `There are no ${GIFT_TOPICS.find((topic) => topic.id === selectedTopic)?.label.toLowerCase()} gifts left today. Pick another topic to keep playing.`}</p>
             </div>
           ) : null}
-          <button type="button" className="coin" disabled={busy || !selectedGift} onClick={takeNext}>
-            {stock.soldOut
-              ? "Come back tomorrow"
-              : !selectedGift
-                ? "Choose another topic"
-                : phase === "vending"
-                  ? "Dispensing"
-                  : phase === "reality"
-                    ? "Five seconds"
-                    : product
-                      ? "Insert another coin"
-                      : "Insert a coin"}
-          </button>
+          <div className="coin-action-row">
+            <div className="coin-player-toggle" role="group" aria-label="Who inserts the coin">
+              {(["Dad", "Leo", "Maya"] as const).map((member) => (
+                <button
+                  key={member}
+                  type="button"
+                  className={coinPlayer === member ? "coin-player-pill active" : "coin-player-pill"}
+                  aria-pressed={coinPlayer === member}
+                  disabled={busy}
+                  onClick={() => chooseCoinPlayer(member)}
+                  title={`Let ${member} insert the coin`}
+                >
+                  {member === "Dad" ? "🧔 Dad" : member === "Leo" ? "👦 Leo" : "👧 Maya"}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="coin" disabled={actionDisabled} onClick={handlePrimaryAction}>
+              {actionLabel()}
+            </button>
+          </div>
           <p>
-            {stock.soldOut
+            {stock.soldOut && playStep !== "in_tray"
               ? "The case is empty until tomorrow."
-              : `${stock.remaining} gifts remain. Drag the coin to the slot, or use this button to play.`}
+              : playStep === "select_item"
+                ? "Coin is in! Click any coil item behind the glass, use the 3D keypad, or tap the button."
+                : playStep === "in_tray"
+                  ? "Your prize dropped into the bottom tray! Click the delivery flap to grab & open it."
+                  : `${stock.remaining} gifts remain. Drag or click the 3D coin, or press to insert it with ${coinPlayer}.`}
           </p>
         </div>
       </main>
@@ -485,10 +764,10 @@ export function App() {
         <StockBoard
           slots={topicStock}
           selectedSlotIndex={targetedSlotIndex}
-          onSelectSlot={(idx) => setTargetedSlotIndex(idx)}
+          onSelectSlot={handleSelectSlot}
         />
         <Receipt
-          product={phase === "idle" || phase === "vending" ? null : product}
+          product={playStep === "revealed" ? product : null}
           copied={copied}
           listening={listening}
           onCopy={() => void copyLink()}

@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import type { GiftTopic } from "../stock";
+import type { CoinPlayer, GiftTopic, PlayStep } from "../stock";
 import type { Phase } from "../scene/Machine";
 import type { Product } from "../generate";
 
 type Props = {
   topic: GiftTopic;
   phase: Phase;
+  playStep?: PlayStep;
+  coinPlayer?: CoinPlayer;
+  isSuspenseHanging?: boolean;
   product: Product | null;
   onNudge: () => void;
 };
@@ -45,7 +48,15 @@ const NUDGE_WHISPERS = [
   { speaker: "Maya", text: "Giggles: 'Look at the people behind us watching! They want your turn!' 👀", sub: "Glancing back at the queue" },
 ];
 
-export function KidsCompanion({ topic, phase, product, onNudge }: Props) {
+export function KidsCompanion({
+  topic,
+  phase,
+  playStep = "need_coin",
+  coinPlayer = "Dad",
+  isSuspenseHanging = false,
+  product,
+  onNudge,
+}: Props) {
   const [index, setIndex] = useState(0);
   const [whisper, setWhisper] = useState<{ speaker: string; text: string; sub: string } | null>(null);
   const [isWiggle, setIsWiggle] = useState(false);
@@ -58,14 +69,56 @@ export function KidsCompanion({ topic, phase, product, onNudge }: Props) {
     return () => window.clearTimeout(id);
   }, [topic]);
 
+  useEffect(() => {
+    setWhisper(null);
+  }, [playStep, isSuspenseHanging]);
+
   let activeSpeech = KID_LINES[topic][index % KID_LINES[topic].length];
   if (whisper) {
     activeSpeech = whisper as typeof activeSpeech;
-  } else if (phase === "vending") {
+  } else if (playStep === "coin_entering") {
+    if (coinPlayer === "Leo") {
+      activeSpeech = {
+        speaker: "Leo",
+        text: "I'm tall enough! Watch me reach up on my tiptoes and push the coin in!",
+        sub: "Stretching both hands way up toward the shiny coin slot",
+      };
+    } else if (coinPlayer === "Maya") {
+      activeSpeech = {
+        speaker: "Maya",
+        text: "1, 2, 3... JUMP! Dropping our lucky coin right into the slot!",
+        sub: "Hopping enthusiastically with a big cheer",
+      };
+    } else {
+      activeSpeech = {
+        speaker: "Both",
+        text: "Clink!! Here goes the coin, Dad! Almost in!",
+        sub: "Watching Dad slide the coin cleanly into the acceptor",
+      };
+    }
+  } else if (playStep === "select_item") {
     activeSpeech = {
       speaker: "Both",
-      text: "IT'S TURNING!! Look, look, look! Which one is falling?!",
-      sub: "Bouncing up and down with both hands on the glass",
+      text: "The coin went in!! Now press the buttons on the machine or tap our toy through the glass!",
+      sub: "Maya points at the shelf codes · Leo leans close to the display glass",
+    };
+  } else if (playStep === "vending" && isSuspenseHanging) {
+    activeSpeech = {
+      speaker: "Both",
+      text: "HOLD ON... IT'S TEETERING ON THE EDGE LIP!! Don't get stuck!! Fall, fall, fall!!",
+      sub: "Maya gasps clasping her hands · Leo holds his breath staring at the coil",
+    };
+  } else if (phase === "vending" || playStep === "vending") {
+    activeSpeech = {
+      speaker: "Both",
+      text: "IT'S TURNING!! Watch the horizontal spiral coil push it forward step by step!!",
+      sub: "Bouncing up and down watching the selected coil spin 360°",
+    };
+  } else if (playStep === "in_tray") {
+    activeSpeech = {
+      speaker: "Both",
+      text: "THUD!! It dropped right into the bottom flap! Tap the tray door to pull it out & open it!",
+      sub: "Both pointing eagerly at the green delivery flap at the bottom",
     };
   } else if (phase === "revealed" && product) {
     if (product.rarity === "impossible") {

@@ -4,6 +4,15 @@ import type { PrizePayload, Product, Rarity } from "./generate";
 const KEY = "impossible-vm-mall-stock-v2";
 export const STOCK_COUNT = 16;
 
+export const COIL_CODES = [
+  "A1", "A2", "A3", "A4",
+  "B1", "B2", "B3", "B4",
+  "C1", "C2", "C3", "C4",
+  "D1", "D2", "D3", "D4",
+] as const;
+
+export type CoilCode = (typeof COIL_CODES)[number];
+
 type MallPrize = {
   name: string;
   kind: string;
@@ -15,6 +24,14 @@ type MallPrize = {
 };
 
 export type GiftTopic = "technology" | "audio" | "snacks" | "style";
+export type CoinPlayer = "Dad" | "Leo" | "Maya";
+export type PlayStep =
+  | "need_coin"
+  | "coin_entering"
+  | "select_item"
+  | "vending"
+  | "in_tray"
+  | "revealed";
 
 export type GiftTopicInfo = {
   id: GiftTopic;
@@ -98,6 +115,7 @@ const PRIZES: MallPrize[] = [
 
 export type StockSlot = {
   index: number;
+  code: string;
   product: Product;
   claimed: boolean;
   topic: GiftTopic;
@@ -166,6 +184,7 @@ export function todayStock(now = new Date()): DayStock {
   const claimed = readClaimed(day);
   const slots = prizesFor().map((prize, index) => ({
     index,
+    code: COIL_CODES[index] ?? `S${index + 1}`,
     product: asProduct(prize, `m${day}${index}`),
     claimed: claimed.has(index),
     topic: prize.topic,

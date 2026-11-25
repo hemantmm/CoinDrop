@@ -236,6 +236,98 @@ export function playCoinPickup(): void {
   tone(ctx, now + 0.02, 2400, 0.07, "sine", 0.06, ctx.destination);
 }
 
+export function playCoinInsertDrop(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  tone(ctx, now, 2350, 0.04, "sine", 0.11, ctx.destination);
+  tone(ctx, now + 0.02, 3100, 0.035, "triangle", 0.08, ctx.destination);
+  click(ctx, now + 0.09, 1400, 0.09);
+  click(ctx, now + 0.17, 1180, 0.08);
+  tone(ctx, now + 0.24, 1760, 0.05, "sine", 0.12, ctx.destination);
+  click(ctx, now + 0.25, 620, 0.14);
+}
+
+export function playKeypadBeep(char: string = "A"): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const freqs: Record<string, number> = {
+    A: 852, B: 770, C: 697, D: 941,
+    "1": 1209, "2": 1336, "3": 1477, "4": 1633,
+    VEND: 1046.5, CLR: 440,
+  };
+  const freq = freqs[char] ?? 880;
+  tone(ctx, now, freq, 0.065, "triangle", 0.075, ctx.destination);
+  tone(ctx, now, freq * 1.5, 0.045, "sine", 0.03, ctx.destination);
+}
+
+export function playCoilWhir(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  tone(ctx, now, 118, 1.15, "sawtooth", 0.032, ctx.destination);
+  tone(ctx, now, 176, 1.05, "triangle", 0.042, ctx.destination);
+  tone(ctx, now + 0.08, 235, 0.85, "sine", 0.022, ctx.destination);
+}
+
+export function playTeeterCreak(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  click(ctx, now, 720, 0.13);
+  click(ctx, now + 0.09, 640, 0.11);
+  click(ctx, now + 0.19, 570, 0.14);
+  click(ctx, now + 0.29, 510, 0.11);
+}
+
+export function playBinThud(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const thump = ctx.createOscillator();
+  const amp = ctx.createGain();
+  thump.type = "sine";
+  thump.frequency.setValueAtTime(145, now);
+  thump.frequency.exponentialRampToValueAtTime(38, now + 0.26);
+  amp.gain.setValueAtTime(0.0001, now);
+  amp.gain.exponentialRampToValueAtTime(0.4, now + 0.02);
+  amp.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
+  thump.connect(amp).connect(ctx.destination);
+  thump.start(now);
+  thump.stop(now + 0.36);
+  click(ctx, now + 0.02, 260, 0.17);
+  click(ctx, now + 0.1, 180, 0.11);
+}
+
+export function playFlapOpen(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  tone(ctx, now, 390, 0.1, "triangle", 0.07, ctx.destination);
+  click(ctx, now + 0.03, 520, 0.14);
+  click(ctx, now + 0.09, 780, 0.11);
+}
+
+export function playCapsulePop(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  click(ctx, now, 1550, 0.22);
+  click(ctx, now + 0.015, 760, 0.25);
+  tone(ctx, now + 0.03, 987.77, 0.16, "sine", 0.13, ctx.destination);
+  tone(ctx, now + 0.08, 1318.51, 0.22, "triangle", 0.1, ctx.destination);
+}
+
+export function playKidCoinCheer(): void {
+  const ctx = getContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  [783.99, 1046.5, 1318.51, 1567.98].forEach((f, i) => {
+    tone(ctx, now + i * 0.05, f, 0.16, "sine", 0.055, ctx.destination);
+  });
+}
+
 export function playEngineStart(): void {
   const ctx = getContext();
   if (!ctx) return;

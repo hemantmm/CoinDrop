@@ -1,12 +1,12 @@
-import { useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, Environment, Lightformer, OrbitControls, RoundedBox } from "@react-three/drei";
-import type { Group, Mesh, MeshStandardMaterial, PointLight } from "three";
+import type { Group, MeshStandardMaterial, PointLight } from "three";
 import * as THREE from "three";
 import { RARITY_COLOR, type Product, type Rarity } from "../generate";
 import { Creature } from "./Creature";
-import type { GiftTopic } from "../stock";
-import { playCoinPickup } from "../audio";
+import { COIL_CODES, type CoinPlayer, type GiftTopic, type PlayStep } from "../stock";
+import { playBinThud, playCoilWhir, playCoinPickup, playKeypadBeep, playTeeterCreak } from "../audio";
 
 export type Phase = "idle" | "vending" | "revealed" | "reality";
 
@@ -247,7 +247,7 @@ export function Gallery({
 }
 
 const COIN_REST = new THREE.Vector3(0.92, 0.5, 1.55);
-const COIN_SLOT = new THREE.Vector3(0.66, 1.36, 0.4);
+const COIN_SLOT = new THREE.Vector3(0.62, 1.38, 0.36);
 const coinPointer = new THREE.Vector2();
 const coinRay = new THREE.Raycaster();
 const coinHit = new THREE.Vector3();
@@ -267,15 +267,22 @@ function pointOnCoinPlane(clientX: number, clientY: number, camera: THREE.Camera
   return coinRay.ray.intersectPlane(coinPlane, coinHit);
 }
 
-function curveCoin(from: THREE.Vector3, amount: number, target: THREE.Vector3) {
+function curveCoin(
+  from: THREE.Vector3,
+  amount: number,
+  target: THREE.Vector3,
+  player: CoinPlayer = "Dad",
+) {
   coinMid.copy(from).lerp(COIN_SLOT, 0.5);
-  coinMid.y += 0.42;
+  coinMid.y += player === "Maya" ? 0.58 : player === "Leo" ? 0.5 : 0.38;
   const remain = 1 - amount;
   target
     .copy(from)
     .multiplyScalar(remain * remain)
     .addScaledVector(coinMid, 2 * remain * amount)
     .addScaledVector(COIN_SLOT, amount * amount);
+  if (player === "Leo") target.y += Math.sin(amount * Math.PI) * 0.05;
+  if (player === "Maya") target.y += Math.sin(amount * Math.PI) * 0.09;
 }
 
 function Brass({ color = "#1a2535" }: { color?: string }) {
@@ -308,22 +315,118 @@ function CabinetShell() {
   );
 }
 
-function Coil() {
+const staticTextureCache = new Map<string, THREE.CanvasTexture>();
+
+function getBadgeTexture(label: string, accent: string, highlighted: boolean): THREE.CanvasTexture {
+  const key = `badge:${label}:${highlighted ? accent : "dim"}`;
+  const existing = staticTextureCache.get(key);
+  if (existing) return existing;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 48;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = highlighted ? accent : "#0b1322";
+    ctx.fillRect(0, 0, 128, 48);
+    ctx.strokeStyle = highlighted ? "#ffffff" : "rgba(148, 163, 184, 0.4)";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, 124, 44);
+    ctx.font = "bold 28px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = highlighted ? "#030712" : "#e2e8f0";
+    ctx.fillText(label, 64, 25);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  staticTextureCache.set(key, tex);
+  return tex;
+}
+
+function getKeycapTexture(label: string, variant: "letter" | "number" | "clr" | "ok"): THREE.CanvasTexture {
+  const key = `key:${label}:${variant}`;
+  const existing = staticTextureCache.get(key);
+  if (existing) return existing;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 96;
+  canvas.height = 72;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle =
+      variant === "clr" ? "#450a0a" : variant === "ok" ? "#064e3b" : variant === "letter" ? "#0f172a" : "#162235";
+    ctx.fillRect(0, 0, 96, 72);
+    ctx.strokeStyle =
+      variant === "clr" ? "#f87171" : variant === "ok" ? "#34d399" : variant === "letter" ? "#38bdf8" : "#94a3b8";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, 92, 68);
+    ctx.font = variant === "clr" || variant === "ok" ? "bold 26px monospace" : "bold 36px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle =
+      variant === "clr" ? "#fecaca" : variant === "ok" ? "#6ee7b7" : variant === "letter" ? "#7dd3fc" : "#f8fafc";
+    ctx.fillText(label, 48, 38);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  staticTextureCache.set(key, tex);
+  return tex;
+}
+
+function getTrayTagTexture(text: string): THREE.CanvasTexture {
+  const key = `tray:${text}`;
+  const existing = staticTextureCache.get(key);
+  if (existing) return existing;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 320;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "#042f2e";
+    ctx.fillRect(0, 0, 320, 64);
+    ctx.strokeStyle = "#34d399";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, 316, 60);
+    ctx.font = "bold 26px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#6ee7b7";
+    ctx.fillText(text, 160, 33);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  staticTextureCache.set(key, tex);
+  return tex;
+}
+
+function HorizontalCoil() {
   const geometry = useMemo(() => {
     const points: THREE.Vector3[] = [];
-    const turns = 9;
-    const steps = 160;
+    const turns = 6;
+    const steps = 84;
+    const radius = 0.048;
     for (let i = 0; i <= steps; i += 1) {
-      const t = i / steps;
-      const angle = t * Math.PI * 2 * turns;
-      points.push(new THREE.Vector3(Math.cos(angle) * 0.16, 0.58 - t * 1.2, Math.sin(angle) * 0.1));
+      const frac = i / steps;
+      const angle = frac * Math.PI * 2 * turns;
+      points.push(
+        new THREE.Vector3(
+          Math.cos(angle) * radius,
+          Math.sin(angle) * radius,
+          -0.115 + frac * 0.22,
+        ),
+      );
     }
-    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 200, 0.022, 8, false);
+    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 72, 0.0046, 8, false);
   }, []);
 
   return (
-    <mesh geometry={geometry} position={[0, 0.08, 0.08]}>
-      <meshStandardMaterial color="#f2eee6" metalness={0.94} roughness={0.14} />
+    <mesh geometry={geometry}>
+      <meshStandardMaterial color="#e4e4e7" metalness={0.92} roughness={0.16} />
     </mesh>
   );
 }
@@ -883,33 +986,412 @@ function RevealedItem({
   );
 }
 
-function Shelves({ marks }: { marks: { shape: string; color: string; claimed: boolean }[] }) {
-  const spots: [number, number][] = [-0.39, -0.13, 0.13, 0.39].flatMap((x): [number, number][] =>
-    [0.57, 0.17, -0.23, -0.63].map((y): [number, number] => [x, y]),
+const SHELF_FLOORS = [0.36, -0.04, -0.44, -0.84];
+const SHELF_COLS = [-0.39, -0.13, 0.13, 0.39];
+
+const SHELF_SPOTS: [number, number, number][] = SHELF_FLOORS.flatMap((floorY, rowIdx) =>
+  SHELF_COLS.map((x): [number, number, number] => [x, floorY + 0.078, rowIdx]),
+);
+
+function CoilSlot({
+  x,
+  y,
+  floorY,
+  index,
+  code,
+  mark,
+  rarity,
+  accent,
+  highlighted,
+  isTargeted,
+  isThisVending,
+  vendStarted,
+  vendMs,
+  onSelectSlot,
+}: {
+  x: number;
+  y: number;
+  floorY: number;
+  index: number;
+  code: string;
+  mark: { shape: string; color: string; claimed: boolean } | undefined;
+  rarity?: Rarity;
+  accent: string;
+  highlighted: boolean;
+  isTargeted: boolean;
+  isThisVending: boolean;
+  vendStarted: number;
+  vendMs: number;
+  onSelectSlot?: (index: number) => void;
+}) {
+  const { gl } = useThree();
+  const coilRef = useRef<Group>(null);
+  const prizeRef = useRef<Group>(null);
+  const [hovered, setHovered] = useState(false);
+
+  const hasItem = Boolean(mark && (!mark.claimed || isThisVending));
+  const badgeTex = useMemo(
+    () => getBadgeTexture(code, accent, isTargeted || isThisVending || hovered),
+    [code, accent, isTargeted, isThisVending, hovered],
   );
+
+  useFrame(() => {
+    if (!coilRef.current || !prizeRef.current) return;
+    if (!isThisVending) {
+      coilRef.current.rotation.z = 0;
+      prizeRef.current.position.set(0, 0, 0);
+      prizeRef.current.rotation.set(0, 0, 0);
+      prizeRef.current.visible = hasItem;
+      return;
+    }
+    const progress = Math.min(1, Math.max(0, (performance.now() - vendStarted) / vendMs));
+    if (progress < 0.5) {
+      const coilT = progress / 0.5;
+      coilRef.current.rotation.z = coilT * Math.PI * 2;
+      prizeRef.current.position.set(0, 0, coilT * 0.135);
+      prizeRef.current.rotation.set(0, 0, 0);
+      prizeRef.current.visible = true;
+    } else if (progress < 0.68) {
+      coilRef.current.rotation.z = Math.PI * 2;
+      const hangT = (progress - 0.5) / 0.18;
+      const wobble = Math.sin(hangT * Math.PI * 5) * 0.09;
+      prizeRef.current.position.set(0, -0.015, 0.15);
+      prizeRef.current.rotation.set(0.62 + wobble, 0, 0);
+      prizeRef.current.visible = true;
+    } else if (progress < 0.9) {
+      coilRef.current.rotation.z = Math.PI * 2;
+      const dropT = (progress - 0.68) / 0.22;
+      const dropDist = (y - -0.94) * (dropT * dropT);
+      prizeRef.current.position.set(0, -0.015 - dropDist, 0.15 + dropT * 0.08);
+      prizeRef.current.rotation.set(0.62 + dropT * 3.8, dropT * 0.8, 0);
+      prizeRef.current.visible = true;
+    } else {
+      coilRef.current.rotation.z = Math.PI * 2;
+      prizeRef.current.visible = false;
+    }
+  });
+
+  return (
+    <group
+      position={[x, y, 0]}
+      onClick={(e) => {
+        if (!hasItem || isThisVending) return;
+        e.stopPropagation();
+        onSelectSlot?.(index);
+      }}
+      onPointerOver={(e) => {
+        if (!hasItem) return;
+        e.stopPropagation();
+        setHovered(true);
+        gl.domElement.style.cursor = "pointer";
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        gl.domElement.style.cursor = "";
+      }}
+    >
+      {/* Horizontal 3D helical steel coil resting on shelf */}
+      <group ref={coilRef}>
+        <HorizontalCoil />
+      </group>
+
+      {/* Prize resting inside coil */}
+      <group ref={prizeRef} visible={hasItem}>
+        {mark ? <PrizeShape shape={mark.shape} color={mark.color} rarity={rarity} /> : null}
+      </group>
+
+      {/* Subtle shelf lip slot tag badge (A1 - D4) */}
+      <mesh position={[0, floorY - y + 0.01, 0.132]}>
+        <planeGeometry args={[0.072, 0.024]} />
+        <meshBasicMaterial
+          map={badgeTex}
+          transparent
+          opacity={highlighted || isTargeted || hovered || isThisVending ? 1 : 0.72}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function Shelves({
+  marks,
+  activeTopicIndex = 0,
+  targetedSlotIndex = null,
+  vendingSlotIndex = null,
+  isVending = false,
+  vendStarted = 0,
+  vendMs = 3200,
+  accent = "#00f5ff",
+  onSelectSlot,
+}: {
+  marks: { shape: string; color: string; claimed: boolean; rarity?: Rarity }[];
+  activeTopicIndex?: number;
+  targetedSlotIndex?: number | null;
+  vendingSlotIndex?: number | null;
+  isVending?: boolean;
+  vendStarted?: number;
+  vendMs?: number;
+  accent?: string;
+  onSelectSlot?: (index: number) => void;
+}) {
   return (
     <group>
-      {[0.76, 0.36, -0.04, -0.44, -0.84].map((y) => (
-        <mesh key={y} position={[0, y, -0.02]}>
-          <boxGeometry args={[1.05, 0.02, 0.28]} />
-          <meshStandardMaterial color="#0d1a2a" roughness={0.7} />
-        </mesh>
+      {[0.76, 0.36, -0.04, -0.44, -0.84].map((floorY, shelfIdx) => (
+        <group key={floorY} position={[0, floorY, -0.02]}>
+          <mesh receiveShadow>
+            <boxGeometry args={[1.05, 0.02, 0.28]} />
+            <meshStandardMaterial color="#0d1a2a" roughness={0.7} metalness={0.35} />
+          </mesh>
+          {shelfIdx > 0 ? (
+            <mesh position={[0, 0.01, 0.14]}>
+              <boxGeometry args={[1.05, 0.024, 0.01]} />
+              <meshStandardMaterial
+                color={shelfIdx - 1 === activeTopicIndex ? "#1e3a5f" : "#152033"}
+                emissive={shelfIdx - 1 === activeTopicIndex ? accent : "#000000"}
+                emissiveIntensity={shelfIdx - 1 === activeTopicIndex ? 0.15 : 0}
+                metalness={0.75}
+                roughness={0.25}
+              />
+            </mesh>
+          ) : null}
+        </group>
       ))}
-      {spots.map(([x, y], index) => {
+      {SHELF_SPOTS.map(([x, y, rowIdx], index) => {
         const mark = marks[index];
-        if (!mark || mark.claimed) return null;
+        const code = COIL_CODES[index] ?? `A${index + 1}`;
+        const floorY = SHELF_FLOORS[rowIdx] ?? 0.36;
         return (
-          <group key={`${mark.shape}-${index}`} position={[x, y, 0]}>
-            <PrizeShape shape={mark.shape} color={mark.color} />
-          </group>
+          <CoilSlot
+            key={`${code}-${index}`}
+            x={x}
+            y={y}
+            floorY={floorY}
+            index={index}
+            code={code}
+            mark={mark}
+            rarity={mark?.rarity}
+            accent={accent}
+            highlighted={rowIdx === activeTopicIndex}
+            isTargeted={targetedSlotIndex === index}
+            isThisVending={isVending && vendingSlotIndex === index}
+            vendStarted={vendStarted}
+            vendMs={vendMs}
+            onSelectSlot={onSelectSlot}
+          />
         );
       })}
     </group>
   );
 }
 
+function KeypadButton({
+  label,
+  variant,
+  position,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  variant: "letter" | "number" | "clr" | "ok";
+  position: [number, number, number];
+  disabled: boolean;
+  onPress: (key: string) => void;
+}) {
+  const { gl } = useThree();
+  const [pressed, setPressed] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const tex = useMemo(() => getKeycapTexture(label, variant), [label, variant]);
+
+  return (
+    <mesh
+      position={[position[0], position[1], position[2] + (pressed ? -0.0025 : 0)]}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (disabled) return;
+        setPressed(true);
+        playKeypadBeep(label === "OK" ? "VEND" : label);
+        onPress(label === "OK" ? "VEND" : label);
+        window.setTimeout(() => setPressed(false), 120);
+      }}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        if (!disabled) {
+          setHovered(true);
+          gl.domElement.style.cursor = "pointer";
+        }
+      }}
+      onPointerOut={() => {
+        setHovered(false);
+        gl.domElement.style.cursor = "";
+      }}
+    >
+      <boxGeometry args={[0.032, 0.022, 0.01]} />
+      <meshStandardMaterial
+        map={tex}
+        metalness={0.55}
+        roughness={0.3}
+        emissive={hovered ? (variant === "ok" ? "#10b981" : variant === "clr" ? "#ef4444" : "#38bdf8") : "#000000"}
+        emissiveIntensity={hovered ? 0.35 : 0}
+      />
+    </mesh>
+  );
+}
+
+function RightBezelControls({
+  playStep,
+  typedCode,
+  activeCode,
+  coinGlow,
+  onCoinClick,
+  onKeyPress,
+}: {
+  playStep: PlayStep;
+  typedCode: string;
+  activeCode: string | null;
+  coinGlow: string;
+  onCoinClick: () => void;
+  onKeyPress: (key: string) => void;
+}) {
+  const { gl } = useThree();
+  const [ledTex, setLedTex] = useState<THREE.CanvasTexture | null>(null);
+
+  const ledState = useMemo(() => {
+    if (playStep === "need_coin") {
+      return activeCode
+        ? { line1: `PICK ${activeCode}`, line2: "INSERT COIN", color: "#fbbf24" }
+        : { line1: "READY $1.00", line2: "INSERT COIN", color: "#fbbf24" };
+    }
+    if (playStep === "coin_entering") {
+      return { line1: "COIN...", line2: "CHECKING", color: "#38bdf8" };
+    }
+    if (playStep === "select_item") {
+      return {
+        line1: "CREDIT $1",
+        line2: typedCode ? `CODE: ${typedCode}` : "PICK A1-D4",
+        color: "#34d399",
+      };
+    }
+    if (playStep === "vending") {
+      return { line1: "MOTOR ON", line2: `VEND ${activeCode ?? ""}`, color: "#38bdf8" };
+    }
+    if (playStep === "in_tray") {
+      return { line1: "DISPENSED", line2: "OPEN TRAY", color: "#34d399" };
+    }
+    return { line1: "ENJOY!", line2: "PLAY AGAIN", color: "#e2e8f0" };
+  }, [playStep, typedCode, activeCode]);
+
+  useEffect(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = "#020610";
+      ctx.fillRect(0, 0, 256, 128);
+      ctx.strokeStyle = ledState.color;
+      ctx.lineWidth = 4;
+      ctx.strokeRect(3, 3, 250, 122);
+      ctx.font = "bold 28px monospace";
+      ctx.fillStyle = "#94a3b8";
+      ctx.textAlign = "center";
+      ctx.fillText(ledState.line1, 128, 46);
+      ctx.font = "bold 36px monospace";
+      ctx.fillStyle = ledState.color;
+      ctx.fillText(ledState.line2, 128, 98);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.anisotropy = 4;
+    tex.needsUpdate = true;
+    setLedTex(tex);
+    return () => {
+      tex.dispose();
+    };
+  }, [ledState]);
+
+  const keys: { label: string; variant: "letter" | "number" | "clr" | "ok"; pos: [number, number, number] }[] = [
+    { label: "A", variant: "letter", pos: [-0.019, 0.02, 0.008] },
+    { label: "B", variant: "letter", pos: [0.019, 0.02, 0.008] },
+    { label: "C", variant: "letter", pos: [-0.019, -0.008, 0.008] },
+    { label: "D", variant: "letter", pos: [0.019, -0.008, 0.008] },
+    { label: "1", variant: "number", pos: [-0.019, -0.036, 0.008] },
+    { label: "2", variant: "number", pos: [0.019, -0.036, 0.008] },
+    { label: "3", variant: "number", pos: [-0.019, -0.064, 0.008] },
+    { label: "4", variant: "number", pos: [0.019, -0.064, 0.008] },
+    { label: "CLR", variant: "clr", pos: [-0.019, -0.092, 0.008] },
+    { label: "OK", variant: "ok", pos: [0.019, -0.092, 0.008] },
+  ];
+
+  const keypadDisabled = playStep === "coin_entering" || playStep === "vending" || playStep === "in_tray";
+
+  return (
+    <group position={[0.62, 0.14, 0.344]}>
+      {/* Integrated flush backing plate on right pillar */}
+      <mesh position={[0, 0.04, 0]}>
+        <boxGeometry args={[0.082, 0.34, 0.008]} />
+        <meshStandardMaterial color="#050a14" roughness={0.45} metalness={0.4} />
+      </mesh>
+
+      {/* Coin acceptor bezel at top (local y = 0.16 => world y = 1.38) */}
+      <group
+        position={[0, 0.16, 0.006]}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (playStep === "need_coin") onCoinClick();
+        }}
+        onPointerOver={() => {
+          if (playStep === "need_coin") gl.domElement.style.cursor = "pointer";
+        }}
+        onPointerOut={() => {
+          gl.domElement.style.cursor = "";
+        }}
+      >
+        <mesh>
+          <boxGeometry args={[0.058, 0.068, 0.014]} />
+          <meshStandardMaterial
+            color="#111a2b"
+            metalness={0.85}
+            roughness={0.22}
+            emissive={playStep === "need_coin" ? coinGlow : "#000000"}
+            emissiveIntensity={playStep === "need_coin" ? 0.25 : 0}
+          />
+        </mesh>
+        {/* Vertical Coin Slot */}
+        <mesh position={[0, 0.005, 0.008]}>
+          <boxGeometry args={[0.008, 0.042, 0.006]} />
+          <meshStandardMaterial color="#020408" roughness={0.2} metalness={0.9} />
+        </mesh>
+      </group>
+
+      {/* Crisp Mini Digital LED Screen */}
+      {ledTex ? (
+        <mesh position={[0, 0.08, 0.006]}>
+          <planeGeometry args={[0.076, 0.038]} />
+          <meshBasicMaterial map={ledTex} />
+        </mesh>
+      ) : null}
+
+      {/* Compact 3D Push Keypad */}
+      <group position={[0, 0.012, 0]}>
+        {keys.map((k) => (
+          <KeypadButton
+            key={k.label}
+            label={k.label}
+            variant={k.variant}
+            position={k.pos}
+            disabled={keypadDisabled}
+            onPress={onKeyPress}
+          />
+        ))}
+      </group>
+    </group>
+  );
+}
+
 export function Machine({
   phase,
+  playStep = "need_coin",
+  coinStarted = 0,
+  coinMs = 850,
   vendStarted,
   vendMs,
   product,
@@ -917,57 +1399,92 @@ export function Machine({
   onInsert,
   stock = [],
   topic = "technology",
+  targetedSlotIndex = null,
+  vendingSlotIndex = null,
+  typedCode = "",
+  coinPlayer = "Dad",
+  onSelectSlotIndex,
+  onKeyPress,
+  onCollect,
 }: {
   phase: Phase;
+  playStep?: PlayStep;
+  coinStarted?: number;
+  coinMs?: number;
   vendStarted: number;
   vendMs: number;
   product: Product | null;
   canInsert: boolean;
   onInsert: () => void;
-  stock?: { shape: string; color: string; claimed: boolean }[];
+  stock?: { shape: string; color: string; claimed: boolean; rarity?: Rarity }[];
   topic?: GiftTopic;
+  targetedSlotIndex?: number | null;
+  vendingSlotIndex?: number | null;
+  typedCode?: string;
+  coinPlayer?: CoinPlayer;
+  onSelectSlotIndex?: (index: number) => void;
+  onKeyPress?: (key: string) => void;
+  onCollect?: () => void;
 }) {
   const theme = THEME_CONFIG[topic] ?? THEME_CONFIG.technology;
+  const activeTopicIndex = topic === "technology" ? 0 : topic === "audio" ? 1 : topic === "snacks" ? 2 : 3;
   const flap = useRef<Group>(null);
   const coin = useRef<Group>(null);
   const drop = useRef<Group>(null);
-  const pod = useRef<Mesh>(null);
-  const creatureWrap = useRef<Group>(null);
   const bulb = useRef<PointLight>(null);
-  const spin = useRef<Group>(null);
   const rig = useRef<Group>(null);
   const lamp = useRef<MeshStandardMaterial>(null);
   const held = useRef(false);
-  const wasVending = useRef(false);
+  const wasCoinEntering = useRef(false);
+  const playedWhir = useRef(false);
+  const playedTeeter = useRef(false);
+  const playedThud = useRef(false);
+  const dragStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const insertRef = useRef(onInsert);
   const allowRef = useRef(canInsert);
   insertRef.current = onInsert;
   allowRef.current = canInsert;
   const { camera, gl, controls } = useThree();
   const rarity: Rarity | null = product?.rarity ?? null;
-  const creature = product?.type === "creature" && product.payload.kind === "creature" ? product.payload : null;
+  const trayTagTex = useMemo(() => getTrayTagTexture("TAP FLAP TO OPEN"), []);
+
+  const activeSlotCode =
+    vendingSlotIndex !== null
+      ? (COIL_CODES[vendingSlotIndex] ?? null)
+      : targetedSlotIndex !== null
+        ? (COIL_CODES[targetedSlotIndex] ?? null)
+        : null;
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
     const progress = progressOf(phase, vendStarted, vendMs);
     const vending = phase === "vending";
     const twitch = idleTwitch(t);
-    const acknowledging = vending && progress < 0.28;
+    const acknowledging = playStep === "select_item" || (vending && progress < 0.25);
 
-    if (spin.current) {
-      let speed = 0.012;
-      if (vending && rarity === "legendary") speed = 0.42;
-      else if (vending && rarity === "rare") speed = 0.24;
-      else if (vending && rarity === "impossible") speed = Math.sin(t * 9) > 0.35 ? 0.55 : 0;
-      else if (vending) speed = 0.18;
-      else if (twitch.active) speed = 0.09;
-      spin.current.rotation.y += speed;
+    if (phase !== "vending") {
+      playedWhir.current = false;
+      playedTeeter.current = false;
+      playedThud.current = false;
+    } else {
+      if (!playedWhir.current && progress >= 0.05) {
+        playedWhir.current = true;
+        playCoilWhir();
+      }
+      if (!playedTeeter.current && progress >= 0.5) {
+        playedTeeter.current = true;
+        playTeeterCreak();
+      }
+      if (!playedThud.current && progress >= 0.86) {
+        playedThud.current = true;
+        playBinThud();
+      }
     }
 
     if (bulb.current) {
       const dip = Math.sin(t * 13.7) * Math.sin(t * 2.3);
       let intensity = dip > 0.82 ? 0.45 : 1.55 + dip * 0.12;
-      if (acknowledging) intensity = 4.2;
+      if (acknowledging) intensity = 3.2;
       if (vending && rarity === "rare") intensity = Math.sin(t * 48) > 0 ? 5.5 : 0.25;
       if (vending && rarity === "legendary") intensity = 2.4 + Math.abs(Math.sin(t * 22)) * 4;
       if (vending && rarity === "impossible") intensity = Math.sin(t * 60) > 0.15 ? 7 : 0.04;
@@ -976,7 +1493,7 @@ export function Machine({
     }
 
     if (lamp.current) {
-      lamp.current.emissiveIntensity = acknowledging ? 6 : 1.2;
+      lamp.current.emissiveIntensity = acknowledging ? 5 : playStep === "in_tray" ? 4 + Math.sin(t * 8) * 2 : 1.2;
     }
 
     if (rig.current) {
@@ -987,7 +1504,11 @@ export function Machine({
         x = twitch.x;
         z = twitch.z;
       }
-      if (vending && acknowledging) pitch = Math.sin(progress / 0.28 * Math.PI) * 0.03;
+      if (vending && progress >= 0.84 && progress < 0.94) {
+        // Subtle thud shudder when prize hits bottom chute
+        const hit = 1 - (progress - 0.84) / 0.1;
+        pitch = Math.sin(hit * Math.PI) * 0.025;
+      }
       if (vending && rarity === "rare") {
         x = Math.sin(t * 46) * 0.014;
         z = Math.sin(t * 37) * 0.01;
@@ -1016,62 +1537,77 @@ export function Machine({
 
     if (flap.current) {
       let angle = 0;
-      if (progress >= 0.55 && progress < 0.86) angle = -1.15 * VEND_EASE((progress - 0.55) / 0.31);
-      else if (progress >= 0.86) angle = -0.28;
-      if (phase === "idle") angle = twitch.flap;
-      if (vending && rarity === "legendary") angle += Math.sin(t * 30) * 0.2;
-      if (vending && rarity === "impossible") angle += Math.sin(t * 9) > 0.4 ? -0.7 : 0.05;
+      if (vending && progress >= 0.82) {
+        angle = -1.05 * VEND_EASE((progress - 0.82) / 0.18);
+      } else if (playStep === "in_tray") {
+        angle = -0.35 + Math.sin(t * 5) * 0.08;
+      } else if (phase === "revealed") {
+        angle = -0.22;
+      } else if (phase === "idle") {
+        angle = twitch.flap;
+      }
+      if (vending && rarity === "legendary") angle += Math.sin(t * 30) * 0.14;
+      if (vending && rarity === "impossible") angle += Math.sin(t * 9) > 0.4 ? -0.6 : 0.05;
       flap.current.rotation.x = angle;
     }
 
     if (coin.current) {
       const mesh = coin.current;
-      const vendingNow = vending;
-      if (vendingNow && !wasVending.current) coinLaunch.copy(mesh.position);
-      wasVending.current = vendingNow;
+      const enteringNow = playStep === "coin_entering";
+      if (enteringNow && !wasCoinEntering.current) {
+        coinLaunch.copy(mesh.position);
+      }
+      wasCoinEntering.current = enteringNow;
 
       if (held.current) {
         mesh.visible = true;
-      } else if (vendingNow && progress < 0.46) {
-        const amount = VEND_EASE(Math.min(1, progress / 0.46));
-        curveCoin(coinLaunch, amount, mesh.position);
-        mesh.visible = true;
-      } else if (vendingNow || phase === "reality") {
-        mesh.visible = false;
-      } else {
+      } else if (enteringNow && coinStarted > 0) {
+        const coinT = Math.min(1, Math.max(0, (performance.now() - coinStarted) / coinMs));
+        const amount = VEND_EASE(coinT);
+        curveCoin(coinLaunch, amount, mesh.position, coinPlayer);
+        mesh.visible = coinT < 0.96;
+      } else if (playStep === "need_coin" || playStep === "revealed") {
         mesh.visible = true;
         coinBob.copy(COIN_REST);
         coinBob.y += Math.sin(t * 2) * 0.03;
         mesh.position.lerp(coinBob, 0.18);
+      } else {
+        mesh.visible = false;
       }
       const closeness = THREE.MathUtils.clamp(1 - mesh.position.distanceTo(COIN_SLOT) / 1.5, 0, 1);
       mesh.scale.setScalar(THREE.MathUtils.lerp(1.35, 0.62, closeness));
     }
 
-    const falling = progress > 0.46;
-    const fallT = falling ? VEND_EASE(Math.min(1, (progress - 0.46) / 0.54)) : 0;
-    const y = falling || phase === "revealed" ? 1.25 + (0.42 - 1.25) * (phase === "vending" ? fallT : 1) : 1.25;
     if (drop.current) {
-      drop.current.visible = phase !== "idle" && phase !== "reality" && (falling || phase === "revealed");
-      drop.current.position.y = y;
-      drop.current.rotation.y = vending ? progress * 5 : 0;
-    }
-    if (pod.current) {
-      const hidePod = phase === "revealed" || (Boolean(creature) && progress > 0.9);
-      pod.current.visible = !hidePod;
-    }
-    if (creatureWrap.current) {
-      creatureWrap.current.visible = Boolean(creature) && (phase === "revealed" || progress > 0.62);
+      if (playStep === "in_tray") {
+        // Capsule sitting visibly inside/under the chute opening ready to be grabbed!
+        drop.current.visible = true;
+        drop.current.position.set(0, 0.24, 0.46);
+        drop.current.rotation.y = Math.sin(t * 2.5) * 0.35;
+      } else if (vending && progress > 0.84) {
+        const emergeT = (progress - 0.84) / 0.16;
+        drop.current.visible = true;
+        drop.current.position.set(0, 0.34 - emergeT * 0.1, 0.24 + emergeT * 0.22);
+        drop.current.rotation.y = progress * 5;
+      } else if (phase === "revealed" || playStep === "revealed") {
+        drop.current.visible = true;
+        drop.current.position.set(0, 0.42, 0.95);
+        drop.current.rotation.y = 0;
+      } else {
+        drop.current.visible = false;
+      }
     }
   });
 
   const podColor = rarity ? RARITY_COLOR[rarity] : "#e0b15a";
+  const coinInteractive = allowRef.current && (playStep === "need_coin" || playStep === "revealed");
 
   return (
     <group ref={rig} visible={phase !== "reality"}>
       <group position={[0, 1.08, 0]}>
         <CabinetShell />
-        <mesh position={[0, 0.12, 0.38]} castShadow>
+        {/* Front glass pane — raycast disabled so clicks reach shelves and coils inside */}
+        <mesh position={[0, 0.12, 0.38]} castShadow raycast={() => null}>
           <boxGeometry args={[1.05, 1.48, 0.008]} />
           <meshPhysicalMaterial
             color="#a0e8ff"
@@ -1083,31 +1619,82 @@ export function Machine({
             transparent
           />
         </mesh>
-        <Shelves marks={stock} />
-        <group ref={spin}>
-          <Coil />
-        </group>
+
+        <Shelves
+          marks={stock}
+          activeTopicIndex={activeTopicIndex}
+          targetedSlotIndex={targetedSlotIndex}
+          vendingSlotIndex={vendingSlotIndex}
+          isVending={phase === "vending"}
+          vendStarted={vendStarted}
+          vendMs={vendMs}
+          accent={theme.lamp}
+          onSelectSlot={onSelectSlotIndex}
+        />
+
         <pointLight ref={bulb} position={[0, 0.35, 0.28]} intensity={2} distance={2.4} color={theme.bulb} />
-        <mesh position={[0.66, 0.28, 0.34]}>
-          <boxGeometry args={[0.045, 0.16, 0.03]} />
-          <meshStandardMaterial color="#040810" roughness={0.5} metalness={0.2} />
-        </mesh>
-        <mesh position={[0.66, 0.4, 0.35]}>
+
+        {/* Right bezel indicator lamp (preserved from original machine) */}
+        <mesh position={[0.62, 0.4, 0.35]}>
           <sphereGeometry args={[0.018, 12, 12]} />
           <meshStandardMaterial ref={lamp} color={theme.lamp} emissive={theme.lamp} emissiveIntensity={2.5} />
         </mesh>
-        <group ref={flap} position={[0, -0.92, 0.28]}>
+
+        {/* Compact Coin Slot, Digital LED & Tactile Keypad integrated on right bezel */}
+        <RightBezelControls
+          playStep={playStep}
+          typedCode={typedCode}
+          activeCode={activeSlotCode}
+          coinGlow={theme.coinGlow}
+          onCoinClick={() => {
+            if (coinInteractive) insertRef.current();
+          }}
+          onKeyPress={(k) => onKeyPress?.(k)}
+        />
+
+        {/* Lower Chute Delivery Flap — clickable to grab & open capsule when dispensed */}
+        <group
+          ref={flap}
+          position={[0, -0.92, 0.28]}
+          onClick={(e) => {
+            if (playStep === "in_tray") {
+              e.stopPropagation();
+              onCollect?.();
+            }
+          }}
+          onPointerOver={() => {
+            if (playStep === "in_tray") gl.domElement.style.cursor = "pointer";
+          }}
+          onPointerOut={() => {
+            gl.domElement.style.cursor = "";
+          }}
+        >
           <mesh position={[0, -0.07, 0.08]}>
             <boxGeometry args={[0.72, 0.12, 0.08]} />
-            <meshPhysicalMaterial color="#1a2a3a" metalness={1} roughness={0.15} clearcoat={0.35} />
+            <meshPhysicalMaterial
+              color={playStep === "in_tray" ? "#164e3f" : "#1a2a3a"}
+              emissive={playStep === "in_tray" ? "#10b981" : "#000000"}
+              emissiveIntensity={playStep === "in_tray" ? 0.35 : 0}
+              metalness={1}
+              roughness={0.15}
+              clearcoat={0.35}
+            />
           </mesh>
+          {playStep === "in_tray" ? (
+            <mesh position={[0, -0.02, 0.13]}>
+              <planeGeometry args={[0.42, 0.085]} />
+              <meshBasicMaterial map={trayTagTex} />
+            </mesh>
+          ) : null}
         </group>
+
         <mesh position={[0, -1.02, 0.02]}>
           <boxGeometry args={[1.2, 0.08, 0.5]} />
           <meshPhysicalMaterial color="#0d1a2a" metalness={0.9} roughness={0.2} clearcoat={0.3} />
         </mesh>
       </group>
 
+      {/* Existing front display plinth */}
       <mesh position={[0, 0.12, 0.95]} castShadow receiveShadow>
         <boxGeometry args={[0.86, 0.28, 0.56]} />
         <meshPhysicalMaterial color="#0d1118" metalness={0.55} roughness={0.38} clearcoat={0.2} />
@@ -1117,18 +1704,20 @@ export function Machine({
         <meshPhysicalMaterial color="#c8e0f0" metalness={0.85} roughness={0.22} />
       </mesh>
 
+      {/* Draggable / Clickable 3D Coin */}
       <group
         ref={coin}
         position={[COIN_REST.x, COIN_REST.y, COIN_REST.z]}
         onPointerOver={() => {
-          if (allowRef.current) gl.domElement.style.cursor = "grab";
+          if (coinInteractive) gl.domElement.style.cursor = "grab";
         }}
         onPointerOut={() => {
           if (!held.current) gl.domElement.style.cursor = "";
         }}
         onPointerDown={(event) => {
-          if (!allowRef.current || phase === "vending" || phase === "reality") return;
+          if (!coinInteractive || phase === "vending" || phase === "reality") return;
           event.stopPropagation();
+          dragStart.current = { x: event.clientX, y: event.clientY };
           held.current = true;
           playCoinPickup();
           gl.domElement.style.cursor = "grabbing";
@@ -1138,14 +1727,17 @@ export function Machine({
             const hit = pointOnCoinPlane(native.clientX, native.clientY, camera, gl.domElement);
             if (hit && coin.current) coin.current.position.copy(hit);
           };
-          const release = () => {
+          const release = (native: PointerEvent) => {
             gl.domElement.removeEventListener("pointermove", place);
             gl.domElement.removeEventListener("pointerup", release);
             gl.domElement.style.cursor = "";
             if (orbit) orbit.enabled = true;
-            const nearSlot = coin.current ? coin.current.position.distanceTo(COIN_SLOT) < 0.34 : false;
+            const movedPx = Math.hypot(native.clientX - dragStart.current.x, native.clientY - dragStart.current.y);
+            const nearSlot = coin.current ? coin.current.position.distanceTo(COIN_SLOT) < 0.42 : false;
             held.current = false;
-            if (nearSlot && allowRef.current) insertRef.current();
+            if ((nearSlot || movedPx < 8) && coinInteractive) {
+              insertRef.current();
+            }
           };
           gl.domElement.addEventListener("pointermove", place);
           gl.domElement.addEventListener("pointerup", release);
@@ -1167,7 +1759,23 @@ export function Machine({
         </group>
       </group>
 
-      <group ref={drop} position={[0, 0.42, 0.95]}>
+      {/* Dispensed Capsule & Revealed Item */}
+      <group
+        ref={drop}
+        position={[0, 0.42, 0.95]}
+        onClick={(e) => {
+          if (playStep === "in_tray") {
+            e.stopPropagation();
+            onCollect?.();
+          }
+        }}
+        onPointerOver={() => {
+          if (playStep === "in_tray") gl.domElement.style.cursor = "pointer";
+        }}
+        onPointerOut={() => {
+          gl.domElement.style.cursor = "";
+        }}
+      >
         <CapsulePod
           phase={phase}
           rarity={rarity}
