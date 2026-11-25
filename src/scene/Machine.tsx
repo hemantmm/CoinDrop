@@ -923,52 +923,57 @@ function RevealedItem({
 
   let shape = "phone";
   let color = "#f5f5f7";
-  if (product.type === "prize") {
-    const titleLower = product.title.toLowerCase();
-    const match = stock.find((s) => s.shape && titleLower.includes(s.shape));
-    if (match) {
-      shape = match.shape;
-      color = match.color;
-    }
-    if (
-      titleLower.includes("anomaly") ||
-      titleLower.includes("singularity") ||
-      titleLower.includes("resonator") ||
-      titleLower.includes("starlight") ||
-      titleLower.includes("chrono") ||
-      product.rarity === "impossible"
-    ) {
-      shape = "anomaly";
-      color = "#e7b4ff";
-    } else if (titleLower.includes("phone") || titleLower.includes("camera") || titleLower.includes("player")) {
-      shape = "phone";
-      color = product.rarity === "legendary" ? "#ffd700" : "#d7d7dc";
-    } else if (titleLower.includes("laptop")) {
-      shape = "laptop";
-      color = "#d7d7dc";
-    } else if (titleLower.includes("watch") || titleLower.includes("sunglasses")) {
-      shape = "watch";
-      color = product.rarity === "legendary" ? "#ffd700" : "#00f5ff";
-    } else if (
-      titleLower.includes("chocolate") ||
-      titleLower.includes("truffle") ||
-      titleLower.includes("candy") ||
-      titleLower.includes("snack") ||
-      titleLower.includes("macaron")
-    ) {
-      shape = "chocolate";
-      color = product.rarity === "legendary" ? "#ffd700" : "#6b3e22";
-    } else if (
-      titleLower.includes("speaker") ||
-      titleLower.includes("headphones") ||
-      titleLower.includes("earbuds") ||
-      titleLower.includes("buds")
-    ) {
-      shape = "buds";
-      color = product.rarity === "rare" ? "#bf5af2" : "#6a8c83";
-    } else if (titleLower.includes("shoes") || titleLower.includes("sneakers") || titleLower.includes("cap") || titleLower.includes("bag")) {
-      shape = "shoes";
-      color = "#f4f1ea";
+  if (product.type === "prize" && product.payload.kind === "prize") {
+    if (product.payload.shape && product.payload.color) {
+      shape = product.payload.shape;
+      color = product.payload.color;
+    } else {
+      const titleLower = product.title.toLowerCase();
+      const match = stock.find((s) => s.shape && titleLower.includes(s.shape));
+      if (match) {
+        shape = match.shape;
+        color = match.color;
+      }
+      if (
+        titleLower.includes("anomaly") ||
+        titleLower.includes("singularity") ||
+        titleLower.includes("resonator") ||
+        titleLower.includes("starlight") ||
+        titleLower.includes("chrono") ||
+        product.rarity === "impossible"
+      ) {
+        shape = "anomaly";
+        color = "#e7b4ff";
+      } else if (titleLower.includes("phone") || titleLower.includes("camera") || titleLower.includes("player")) {
+        shape = "phone";
+        color = product.rarity === "legendary" ? "#ffd700" : "#d7d7dc";
+      } else if (titleLower.includes("laptop")) {
+        shape = "laptop";
+        color = "#d7d7dc";
+      } else if (titleLower.includes("watch") || titleLower.includes("sunglasses")) {
+        shape = "watch";
+        color = product.rarity === "legendary" ? "#ffd700" : "#00f5ff";
+      } else if (
+        titleLower.includes("chocolate") ||
+        titleLower.includes("truffle") ||
+        titleLower.includes("candy") ||
+        titleLower.includes("snack") ||
+        titleLower.includes("macaron")
+      ) {
+        shape = "chocolate";
+        color = product.rarity === "legendary" ? "#ffd700" : "#6b3e22";
+      } else if (
+        titleLower.includes("speaker") ||
+        titleLower.includes("headphones") ||
+        titleLower.includes("earbuds") ||
+        titleLower.includes("buds")
+      ) {
+        shape = "buds";
+        color = product.rarity === "rare" ? "#bf5af2" : "#6a8c83";
+      } else if (titleLower.includes("shoes") || titleLower.includes("sneakers") || titleLower.includes("cap") || titleLower.includes("bag")) {
+        shape = "shoes";
+        color = "#f4f1ea";
+      }
     }
   } else if (product.rarity === "impossible") {
     shape = "anomaly";

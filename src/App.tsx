@@ -16,7 +16,7 @@ import {
   unlockAudio,
 } from "./audio";
 import { loadCabinet, remember, shareUrl, type CabinetItem } from "./cabinet";
-import { generate, isHighRarity, type Product } from "./generate";
+import { isHighRarity, type Product } from "./generate";
 import { displayLine, noteVisit, type Readout } from "./machine/personality";
 import { isSeed } from "./rng";
 import { Crowd } from "./scene/Crowd";
@@ -27,6 +27,8 @@ import {
   claimSlot,
   COIL_CODES,
   GIFT_TOPICS,
+  prizeForSeed,
+  resolveProduct,
   todayStock,
   type CoinPlayer,
   type DayStock,
@@ -48,7 +50,7 @@ const MOMENT_MS = 5000;
 function initialProduct(): Product | null {
   const seed = new URLSearchParams(window.location.search).get("seed");
   if (!seed || !isSeed(seed)) return null;
-  return generate(seed);
+  return resolveProduct(seed);
 }
 
 async function copyText(value: string) {
@@ -92,7 +94,10 @@ export function App() {
   const [advance, setAdvance] = useState(0);
   const handed = useRef<string | null>(null);
   const [stock, setStock] = useState<DayStock>(() => todayStock());
-  const [selectedTopic, setSelectedTopic] = useState<GiftTopic>("technology");
+  const [selectedTopic, setSelectedTopic] = useState<GiftTopic>(() => {
+    const initial = starting.current ? prizeForSeed(starting.current.seed) : null;
+    return initial?.topic ?? "technology";
+  });
   const [targetedSlotIndex, setTargetedSlotIndex] = useState<number | null>(null);
   const [vendingSlotIndex, setVendingSlotIndex] = useState<number | null>(null);
   const [coinPlayer, setCoinPlayer] = useState<CoinPlayer>("Dad");
@@ -779,7 +784,15 @@ export function App() {
         <Cabinet
           items={cabinet}
           activeSeed={product?.seed ?? null}
-          onOpen={(seed) => show(generate(seed), "instant")}
+          onOpen={(seed) => {
+            const meta = prizeForSeed(seed);
+            if (meta) setSelectedTopic(meta.topic);
+            setIsSuspenseHanging(false);
+            setVendingSlotIndex(null);
+            setTargetedSlotIndex(null);
+            setTypedCode("");
+            show(resolveProduct(seed), "instant");
+          }}
         />
       </aside>
       {showJourney ? <FamilyJourney onComplete={handleCompleteJourney} /> : null}

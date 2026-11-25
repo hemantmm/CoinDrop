@@ -17,7 +17,13 @@ export type LetterPayload = ReturnType<typeof writeLetter>;
 export type CreaturePayload = ReturnType<typeof writeCreature>;
 export type SoundPayload = ReturnType<typeof writeSound>;
 export type RealityPayload = ReturnType<typeof writeReality>;
-export type PrizePayload = { kind: "prize"; name: string; detail: string };
+export type PrizePayload = {
+  kind: "prize";
+  name: string;
+  detail: string;
+  shape?: string;
+  color?: string;
+};
 export type Payload = MemoryPayload | LetterPayload | CreaturePayload | SoundPayload | RealityPayload | PrizePayload;
 
 export type Product = {

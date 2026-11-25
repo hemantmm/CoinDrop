@@ -1,5 +1,5 @@
 import { hashSerial } from "./rng";
-import type { PrizePayload, Product, Rarity } from "./generate";
+import { generate, type PrizePayload, type Product, type Rarity } from "./generate";
 
 const KEY = "impossible-vm-mall-stock-v2";
 export const STOCK_COUNT = 16;
@@ -142,7 +142,13 @@ function prizesFor(): MallPrize[] {
 }
 
 function asProduct(prize: MallPrize, seed: string): Product {
-  const payload: PrizePayload = { kind: "prize", name: prize.name, detail: prize.detail };
+  const payload: PrizePayload = {
+    kind: "prize",
+    name: prize.name,
+    detail: prize.detail,
+    shape: prize.shape,
+    color: prize.color,
+  };
   return {
     seed,
     type: "prize",
@@ -153,6 +159,38 @@ function asProduct(prize: MallPrize, seed: string): Product {
     serial: hashSerial(seed),
     payload,
   };
+}
+
+const MALL_SEED_RE = /^m(\d{8})(\d{1,2})$/;
+
+export function prizeForSeed(seed: string): {
+  product: Product;
+  topic: GiftTopic;
+  shape: MallPrize["shape"];
+  color: string;
+  index: number;
+} | null {
+  const match = MALL_SEED_RE.exec(seed);
+  if (!match) return null;
+  const indexRaw = match[2];
+  if (!indexRaw) return null;
+  const index = Number.parseInt(indexRaw, 10);
+  if (!Number.isInteger(index) || String(index) !== indexRaw) return null;
+  const prize = PRIZES[index];
+  if (!prize) return null;
+  return {
+    product: asProduct(prize, seed),
+    topic: prize.topic,
+    shape: prize.shape,
+    color: prize.color,
+    index,
+  };
+}
+
+export function resolveProduct(seed: string): Product {
+  const mall = prizeForSeed(seed);
+  if (mall) return mall.product;
+  return generate(seed);
 }
 
 function readClaimed(day: string): Set<number> {
