@@ -29,11 +29,11 @@ function cardTexture(product: Product) {
   if (!pen) return null;
   const payload = product.payload;
   const paper = payload.kind === "letter";
-  pen.fillStyle = paper ? "#f4efe4" : "rgba(16, 14, 12, 0.94)";
+  pen.fillStyle = paper ? "#f4efe4" : "rgba(14, 15, 22, 0.96)";
   pen.fillRect(0, 0, canvas.width, canvas.height);
-  pen.strokeStyle = paper ? "#c4b49a" : "rgba(224, 177, 90, 0.7)";
-  pen.lineWidth = 8;
-  pen.strokeRect(16, 16, canvas.width - 32, canvas.height - 32);
+  pen.strokeStyle = paper ? "#c4b49a" : "rgba(224, 177, 90, 0.78)";
+  pen.lineWidth = 10;
+  pen.strokeRect(18, 18, canvas.width - 36, canvas.height - 36);
   const ink = paper ? "#241c16" : "#f3ecdf";
   const muted = paper ? "#4a4036" : "#e0b15a";
   pen.textAlign = "left";
@@ -76,13 +76,13 @@ function cardTexture(product: Product) {
     pen.font = "600 84px Fraunces, Palatino, serif";
     pen.fillText(product.title, 512, 250);
   } else if (payload.kind === "prize") {
-    pen.fillText(product.traits[0]?.toUpperCase() ?? "PRIZE", 64, 70);
+    pen.fillText(`${product.rarity.toUpperCase()} · ${product.traits[0]?.toUpperCase() ?? "PRIZE"}`, 64, 68);
     pen.fillStyle = ink;
-    pen.font = "600 78px Fraunces, Palatino, serif";
-    const next = wrap(pen, payload.name, 64, 140, 880, 86);
+    pen.font = "600 74px Fraunces, Palatino, serif";
+    const next = wrap(pen, payload.name, 64, 138, 880, 84);
     pen.fillStyle = muted;
-    pen.font = "400 32px Fraunces, Palatino, serif";
-    wrap(pen, payload.detail, 64, next + 16, 880, 42);
+    pen.font = "400 34px Fraunces, Palatino, serif";
+    wrap(pen, payload.detail, 64, next + 16, 880, 44);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -104,42 +104,45 @@ function rounded(pen: CanvasRenderingContext2D, x: number, y: number, width: num
 function plateTexture(readout: Readout) {
   const canvas = document.createElement("canvas");
   canvas.width = 1280;
-  canvas.height = 420;
+  canvas.height = 340;
   const pen = canvas.getContext("2d");
   if (!pen) return null;
-  const accent = readout.tone === "fault" ? "#e7b4ff" : readout.tone === "warn" ? "#f0d7a2" : "#e0b15a";
+  const accent = readout.tone === "fault" ? "#e7b4ff" : readout.tone === "warn" ? "#fde68a" : "#7dd3fc";
   pen.clearRect(0, 0, canvas.width, canvas.height);
 
   const bezel = pen.createLinearGradient(0, 0, 0, canvas.height);
-  bezel.addColorStop(0, "#c9a36a");
-  bezel.addColorStop(0.45, "#6d522f");
-  bezel.addColorStop(1, "#3a2a16");
-  rounded(pen, 16, 24, 1248, 372, 36);
+  bezel.addColorStop(0, "#334155");
+  bezel.addColorStop(0.5, "#1e293b");
+  bezel.addColorStop(1, "#0f172a");
+  rounded(pen, 12, 16, 1256, 308, 32);
   pen.fillStyle = bezel;
   pen.fill();
+  pen.strokeStyle = accent;
+  pen.lineWidth = 5;
+  pen.stroke();
 
-  rounded(pen, 40, 48, 1200, 324, 24);
-  pen.fillStyle = "rgba(10, 8, 6, 0.94)";
+  rounded(pen, 32, 34, 1216, 272, 22);
+  pen.fillStyle = "rgba(4, 7, 15, 0.96)";
   pen.fill();
 
   pen.beginPath();
-  pen.arc(92, 118, 14, 0, Math.PI * 2);
+  pen.arc(82, 92, 13, 0, Math.PI * 2);
   pen.fillStyle = accent;
   pen.fill();
-  pen.font = "500 28px 'IBM Plex Mono', ui-monospace, monospace";
+  pen.font = "600 27px 'IBM Plex Mono', ui-monospace, monospace";
   pen.fillStyle = accent;
   pen.textAlign = "left";
   pen.textBaseline = "middle";
-  pen.fillText(readout.label.toUpperCase(), 124, 118);
+  pen.fillText(readout.label.toUpperCase(), 112, 92);
 
   pen.textAlign = "left";
   pen.textBaseline = "top";
-  pen.fillStyle = "#f6efe2";
-  pen.font = "600 52px Fraunces, Palatino, serif";
-  const afterTitle = wrap(pen, readout.text, 72, 168, 1120, 60);
-  pen.fillStyle = "#cbb892";
-  pen.font = "400 28px Fraunces, Palatino, serif";
-  wrap(pen, readout.detail, 72, Math.min(afterTitle + 8, 292), 1120, 36);
+  pen.fillStyle = "#f8fafc";
+  pen.font = "700 48px Inter, system-ui, sans-serif";
+  const afterTitle = wrap(pen, readout.text, 66, 138, 1140, 56);
+  pen.fillStyle = "#cbd5e1";
+  pen.font = "400 28px Inter, system-ui, sans-serif";
+  wrap(pen, readout.detail, 66, Math.min(afterTitle + 6, 240), 1140, 34);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = 8;
@@ -175,11 +178,14 @@ function DisplayPlate({ readout }: { readout: Readout }) {
     `${readout.tone}:${readout.label}:${readout.text}:${readout.detail}`,
   );
   if (!texture) return null;
+  // Mounted cleanly on the top crown marquee so none of shelves A-D are blocked
   return (
-    <mesh position={[0, 1.66, 0.44]}>
-      <planeGeometry args={[1.02, 0.33]} />
-      <meshBasicMaterial map={texture} transparent depthWrite={false} />
-    </mesh>
+    <group position={[0, 2.13, 0.34]} rotation={[0.08, 0, 0]}>
+      <mesh raycast={() => null}>
+        <planeGeometry args={[1.18, 0.31]} />
+        <meshBasicMaterial map={texture} transparent depthWrite={false} />
+      </mesh>
+    </group>
   );
 }
 
@@ -187,15 +193,23 @@ function ProductCard({ product }: { product: Product }) {
   const texture = usePainted(() => cardTexture(product), product.seed);
   if (!texture) return null;
   const creature = product.type === "creature";
+  // Positioned cleanly on a display easel to the front-right of the plinth without clipping or blocking the prize
   return (
-    <mesh
-      position={creature ? [0, 0.95, 1.18] : [0, 0.58, 1.16]}
-      rotation={[creature ? -0.15 : -0.4, 0.38, 0]}
-      castShadow
-    >
-      <planeGeometry args={creature ? [0.62, 0.28] : [0.78, 0.48]} />
-      <meshStandardMaterial map={texture} roughness={0.55} metalness={0.05} />
-    </mesh>
+    <group position={[0.58, 0.24, 1.15]} rotation={[-0.42, -0.34, 0]}>
+      {/* Brass easel leg */}
+      <mesh position={[0, -0.14, -0.05]} rotation={[0.35, 0, 0]} raycast={() => null}>
+        <cylinderGeometry args={[0.008, 0.008, 0.28, 8]} />
+        <meshStandardMaterial color="#cbd5e1" metalness={0.85} roughness={0.25} />
+      </mesh>
+      <mesh castShadow raycast={() => null}>
+        <boxGeometry args={creature ? [0.46, 0.22, 0.014] : [0.54, 0.34, 0.014]} />
+        <meshStandardMaterial color="#1e293b" metalness={0.6} roughness={0.35} />
+      </mesh>
+      <mesh position={[0, 0, 0.009]} raycast={() => null}>
+        <planeGeometry args={creature ? [0.44, 0.2] : [0.52, 0.32]} />
+        <meshStandardMaterial map={texture} roughness={0.5} metalness={0.05} />
+      </mesh>
+    </group>
   );
 }
 

@@ -63,10 +63,15 @@ export function FamilyJourney({ onComplete }: Props) {
   // Level 2: 415 (inside cabin) -> 535 (walk out) -> 660 (at vending machine)
   const [familyX, setFamilyX] = useState(80);
 
+  const rafRef = useRef<number | null>(null);
   const timersRef = useRef<number[]>([]);
   const clearAllTimers = () => {
     timersRef.current.forEach((t) => window.clearTimeout(t));
     timersRef.current = [];
+    if (rafRef.current !== null) {
+      window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
   };
 
   const addTimer = (fn: () => void, ms: number) => {
@@ -106,28 +111,32 @@ export function FamilyJourney({ onComplete }: Props) {
     return () => clearAllTimers();
   }, [stage]);
 
-  // Handle GPS Driving progress during autoStep === 4
+  // Handle GPS Driving progress during autoStep === 4 smoothly at 60fps
   useEffect(() => {
     if (stage !== "auto_trip" || autoStep !== 4) return;
+    let raf = 0;
+    const driveStart = performance.now();
+    const durationMs = 3850;
+    let triggered = false;
 
-    const interval = window.setInterval(() => {
-      setCarProgress((prev) => {
-        if (prev >= 0.96) {
-          window.clearInterval(interval);
-          // Car reaches Starlight Mall underground parking bay -> Now stop and ask the user!
-          addTimer(() => {
-            unlockAudio();
-            playParkingBeep();
-            setStage("parking_bay");
-          }, 500);
-          return 0.96;
-        }
-        return prev + 0.024;
-      });
-    }, 110);
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - driveStart) / durationMs);
+      setCarProgress(0.12 + p * (0.96 - 0.12));
+      if (p < 1) {
+        raf = window.requestAnimationFrame(tick);
+      } else if (!triggered) {
+        triggered = true;
+        addTimer(() => {
+          unlockAudio();
+          playParkingBeep();
+          setStage("parking_bay");
+        }, 450);
+      }
+    };
+    raf = window.requestAnimationFrame(tick);
 
     return () => {
-      window.clearInterval(interval);
+      window.cancelAnimationFrame(raf);
       clearAllTimers();
     };
   }, [stage, autoStep]);
@@ -151,110 +160,85 @@ export function FamilyJourney({ onComplete }: Props) {
     playCarLock();
     setStage("mall_walkthrough");
 
-    // Initialize state at Ground Floor:
     setWalkPhase(0);
     setFamilyX(80);
     setCabinY(285);
     setDoorsOpen(false);
     setCurrentFloor("P2");
 
-    // ---------------------------------------------------------------------
-    // TIMELINE OF THE COMPLETE ANIMATED SEQUENCE:
-    // ---------------------------------------------------------------------
+    let firedPhase1 = false;
+    let firedPhase2 = false;
+    let firedPhase3 = false;
+    let firedPhase4 = false;
+    let firedPhase5 = false;
+    let firedPhase6 = false;
+    const startMs = performance.now();
 
-    // PHASE 0: Family walks across Ground Floor towards the lift (t = 0 to 2200ms)
-    let curX = 80;
-    const walkToLiftInterval = window.setInterval(() => {
-      curX += 16;
-      if (curX >= 330) {
-        curX = 330;
-        window.clearInterval(walkToLiftInterval);
-      }
-      setFamilyX(curX);
-    }, 120);
+    const stepWalkthrough = (now: number) => {
+      const elapsed = now - startMs;
 
-    // PHASE 1: At t = 2400ms, elevator doors SLIDE OPEN, family walks INSIDE!
-    addTimer(() => {
-      setDoorsOpen(true);
-      setWalkPhase(1);
-
-      // Family steps inside the elevator cabin: X moves from 330 to 415
-      let inX = 330;
-      const enterLiftInterval = window.setInterval(() => {
-        inX += 10;
-        if (inX >= 415) {
-          inX = 415;
-          window.clearInterval(enterLiftInterval);
+      if (elapsed < 2200) {
+        const p = Math.min(1, elapsed / 2200);
+        setFamilyX(80 + (330 - 80) * p);
+      } else if (elapsed < 4200) {
+        if (!firedPhase1) {
+          firedPhase1 = true;
+          setDoorsOpen(true);
+          setWalkPhase(1);
         }
-        setFamilyX(inX);
-      }, 140);
-    }, 2400);
-
-    // PHASE 2: At t = 4200ms, elevator doors SLIDE CLOSED!
-    addTimer(() => {
-      setDoorsOpen(false);
-      setWalkPhase(2);
-    }, 4200);
-
-    // PHASE 3: At t = 5000ms, elevator cabin VISIBLY ASCENDS through the shaft!
-    addTimer(() => {
-      setWalkPhase(3);
-
-      // Cabin Y moves smoothly from 285 up to 45 over 3.6 seconds:
-      let curY = 285;
-      const ascendInterval = window.setInterval(() => {
-        curY -= 8;
-        if (curY <= 170 && curY > 150) {
-          setCurrentFloor("L1");
+        const p = Math.min(1, (elapsed - 2400) / 1600);
+        if (p >= 0) setFamilyX(330 + (415 - 330) * p);
+      } else if (elapsed < 5000) {
+        if (!firedPhase2) {
+          firedPhase2 = true;
+          setFamilyX(415);
+          setDoorsOpen(false);
+          setWalkPhase(2);
         }
-        if (curY <= 45) {
-          curY = 45;
+      } else if (elapsed < 8800) {
+        if (!firedPhase3) {
+          firedPhase3 = true;
+          setWalkPhase(3);
+        }
+        const p = Math.min(1, (elapsed - 5000) / 3600);
+        const eased = 1 - (1 - p) ** 2;
+        const y = 285 - (285 - 45) * eased;
+        setCabinY(y);
+        if (y <= 170 && y > 60) setCurrentFloor("L1");
+        else if (y <= 60) setCurrentFloor("L2");
+      } else if (elapsed < 10800) {
+        if (!firedPhase4) {
+          firedPhase4 = true;
+          setCabinY(45);
           setCurrentFloor("L2");
-          window.clearInterval(ascendInterval);
+          unlockAudio();
+          playElevatorDing();
+          setDoorsOpen(true);
+          setWalkPhase(4);
         }
-        setCabinY(curY);
-      }, 110);
-    }, 5000);
-
-    // PHASE 4: At t = 8800ms, elevator arrives at Level 2, DING! doors SLIDE OPEN!
-    addTimer(() => {
-      unlockAudio();
-      playElevatorDing();
-      setDoorsOpen(true);
-      setWalkPhase(4);
-
-      // Family walks OUT of the elevator cabin onto Level 2: X moves from 415 to 540
-      let outX = 415;
-      const exitLiftInterval = window.setInterval(() => {
-        outX += 12;
-        if (outX >= 540) {
-          outX = 540;
-          window.clearInterval(exitLiftInterval);
+        const p = Math.min(1, (elapsed - 9000) / 1700);
+        if (p >= 0) setFamilyX(415 + (540 - 415) * p);
+      } else if (elapsed < 12600) {
+        if (!firedPhase5) {
+          firedPhase5 = true;
+          setWalkPhase(5);
         }
-        setFamilyX(outX);
-      }, 140);
-    }, 8800);
-
-    // PHASE 5: At t = 10800ms, family moves across Level 2 to the Vending Machine!
-    addTimer(() => {
-      setWalkPhase(5);
-
-      // Family walks across Level 2 floor to Vending Machine: X moves from 540 to 660
-      let playX = 540;
-      const walkToMachineInterval = window.setInterval(() => {
-        playX += 12;
-        if (playX >= 660) {
-          playX = 660;
-          window.clearInterval(walkToMachineInterval);
+        const p = Math.min(1, (elapsed - 10800) / 1750);
+        setFamilyX(540 + (660 - 540) * p);
+      } else {
+        if (!firedPhase6) {
+          firedPhase6 = true;
+          setFamilyX(660);
+          setWalkPhase(6);
         }
-        setFamilyX(playX);
-      }, 130);
-    }, 10800);
+        rafRef.current = null;
+        return;
+      }
 
-    // PHASE 6: At t = 12600ms, arrived at Vending Machine! Final CTA ready!
-    addTimer(() => {
-      setWalkPhase(6);
-    }, 12600);
+      rafRef.current = window.requestAnimationFrame(stepWalkthrough);
+    };
+
+    rafRef.current = window.requestAnimationFrame(stepWalkthrough);
   };
 
   // Fast-forward directly to the vending machine

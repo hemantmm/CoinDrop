@@ -2120,6 +2120,63 @@ h1 {
   cursor: default;
 }
 
+.header-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.camera-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hud-chip-btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: all 140ms ease;
+}
+
+.hud-chip-btn:hover {
+  color: var(--ink);
+  border-color: var(--theme-accent);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hud-chip-btn.active {
+  color: var(--theme-accent);
+  border-color: var(--theme-accent);
+  background: var(--theme-tag-bg);
+}
+
+.coin-return-pill {
+  appearance: none;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.35);
+  color: #fecaca;
+  border-radius: 999px;
+  padding: 10px 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: all 150ms ease;
+}
+
+.coin-return-pill:hover {
+  background: rgba(185, 28, 28, 0.5);
+  border-color: #f87171;
+}
+
 
 
 

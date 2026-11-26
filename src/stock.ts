@@ -31,6 +31,7 @@ export type PlayStep =
   | "select_item"
   | "vending"
   | "in_tray"
+  | "collecting"
   | "revealed";
 
 export type GiftTopicInfo = {

@@ -9,6 +9,7 @@ type Props = {
   playStep?: PlayStep;
   coinPlayer?: CoinPlayer;
   isSuspenseHanging?: boolean;
+  nudgeWarn?: boolean;
   product: Product | null;
   onNudge: () => void;
 };
@@ -54,6 +55,7 @@ export function KidsCompanion({
   playStep = "need_coin",
   coinPlayer = "Dad",
   isSuspenseHanging = false,
+  nudgeWarn = false,
   product,
   onNudge,
 }: Props) {
@@ -102,11 +104,17 @@ export function KidsCompanion({
       text: "The coin went in!! Now press the buttons on the machine or tap our toy through the glass!",
       sub: "Maya points at the shelf codes · Leo leans close to the display glass",
     };
+  } else if (nudgeWarn) {
+    activeSpeech = {
+      speaker: "Both",
+      text: "HAHAHA!! Dad nudged the glass and knocked it clean off the lip!!",
+      sub: "Alarm chirps 'DO NOT SHAKE' while Maya & Leo cheer as it tumbles down!",
+    };
   } else if (playStep === "vending" && isSuspenseHanging) {
     activeSpeech = {
       speaker: "Both",
-      text: "HOLD ON... IT'S TEETERING ON THE EDGE LIP!! Don't get stuck!! Fall, fall, fall!!",
-      sub: "Maya gasps clasping her hands · Leo holds his breath staring at the coil",
+      text: "GASP!! IT'S BALANCED RIGHT ON THE EDGE LIP!! Tap the glass to nudge it, Dad!!",
+      sub: "Maya clasps her hands · Leo stares wide-eyed at the teetering capsule",
     };
   } else if (phase === "vending" || playStep === "vending") {
     activeSpeech = {
@@ -117,8 +125,14 @@ export function KidsCompanion({
   } else if (playStep === "in_tray") {
     activeSpeech = {
       speaker: "Both",
-      text: "THUD!! It dropped right into the bottom flap! Tap the tray door to pull it out & open it!",
-      sub: "Both pointing eagerly at the green delivery flap at the bottom",
+      text: "THUD!! Look inside the bottom pocket — push the green door flap to grab & open it!",
+      sub: "Both crouch and point right at the illuminated pickup tray",
+    };
+  } else if (playStep === "collecting") {
+    activeSpeech = {
+      speaker: "Both",
+      text: "Lifting it onto the spotlight stand... OOH OPEN IT!!",
+      sub: "Pressing close around the showcase plinth as the capsule hinges open",
     };
   } else if (phase === "revealed" && product) {
     if (product.rarity === "impossible") {
