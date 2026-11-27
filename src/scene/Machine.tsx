@@ -107,18 +107,21 @@ const COLLECT_MS = 480;
 
 const CAMERA_PRESETS: Record<CameraView, { pos: THREE.Vector3; target: THREE.Vector3 }> = {
   default: {
-    pos: new THREE.Vector3(0.06, 1.48, 2.86),
+    pos: new THREE.Vector3(0.06, 1.46, 2.82),
     target: new THREE.Vector3(0.0, 1.06, 0.25),
   },
   controls: {
-    pos: new THREE.Vector3(0.76, 1.38, 1.62),
-    target: new THREE.Vector3(0.54, 1.24, 0.36),
+    pos: new THREE.Vector3(0.76, 1.38, 1.56),
+    target: new THREE.Vector3(0.54, 1.22, 0.36),
   },
   plinth: {
-    pos: new THREE.Vector3(0.04, 0.78, 1.98),
-    target: new THREE.Vector3(-0.02, 0.44, 0.92),
+    pos: new THREE.Vector3(0.04, 0.78, 1.92),
+    target: new THREE.Vector3(-0.02, 0.44, 0.94),
   },
 };
+
+const camGoalPos = new THREE.Vector3();
+const camGoalTarget = new THREE.Vector3();
 
 function idleTwitch(t: number): { active: boolean; x: number; z: number; flap: number } {
   const local = t % 9;
@@ -141,43 +144,163 @@ function progressOf(phase: Phase, vendStarted: number, vendMs: number): number {
   return Math.min(1, Math.max(0, (performance.now() - vendStarted) / vendMs));
 }
 
+export const SHELF_FLOORS = [0.46, 0.09, -0.28, -0.65] as const;
+const SHELF_COLS = [-0.43, -0.19, 0.05, 0.29] as const;
+
+export const SHELF_SPOTS: [number, number, number][] = SHELF_FLOORS.flatMap((floorY, rowIdx) =>
+  SHELF_COLS.map((x): [number, number, number] => [x, floorY + 0.084, rowIdx]),
+);
+
+// Three.js physical spark burst for coin accept, bin thud, and capsule reveal
+function BurstParticles({
+  triggerAt,
+  origin,
+  color,
+  count = 36,
+  speed = 1.6,
+}: {
+  triggerAt: number;
+  origin: [number, number, number];
+  color: string;
+  count?: number;
+  speed?: number;
+}) {
+  const pointsRef = useRef<THREE.Points>(null);
+  const velRef = useRef<Float32Array>(new Float32Array(count * 3));
+  const lastTrigger = useRef(0);
+  const activeUntil = useRef(0);
+
+  const [positions, colors] = useMemo(() => {
+    const pos = new Float32Array(count * 3);
+    const col = new Float32Array(count * 3);
+    const base = new THREE.Color(color);
+    const bright = new THREE.Color("#ffffff");
+    for (let i = 0; i < count; i++) {
+      const c = base.clone().lerp(bright, (i % 3) * 0.28);
+      col[i * 3] = c.r;
+      col[i * 3 + 1] = c.g;
+      col[i * 3 + 2] = c.b;
+    }
+    return [pos, col];
+  }, [count, color]);
+
+  useFrame((_, delta) => {
+    const pts = pointsRef.current;
+    if (!pts) return;
+    const now = performance.now();
+    if (triggerAt > 0 && triggerAt !== lastTrigger.current) {
+      lastTrigger.current = triggerAt;
+      activeUntil.current = now + 950;
+      const attr = pts.geometry.getAttribute("position") as THREE.BufferAttribute;
+      const arr = attr.array as Float32Array;
+      const v = velRef.current;
+      for (let i = 0; i < count; i++) {
+        arr[i * 3] = origin[0];
+        arr[i * 3 + 1] = origin[1];
+        arr[i * 3 + 2] = origin[2];
+        const ang = (i / count) * Math.PI * 2 + Math.random() * 0.6;
+        const mag = speed * (0.4 + Math.random() * 0.8);
+        v[i * 3] = Math.cos(ang) * mag * 0.7;
+        v[i * 3 + 1] = mag * (0.65 + Math.random() * 0.6);
+        v[i * 3 + 2] = Math.sin(ang) * mag * 0.7;
+      }
+      attr.needsUpdate = true;
+      pts.visible = true;
+    }
+
+    if (now > activeUntil.current) {
+      pts.visible = false;
+      return;
+    }
+
+    const dt = Math.min(0.04, delta);
+    const remain = Math.max(0, (activeUntil.current - now) / 950);
+    const attr = pts.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const arr = attr.array as Float32Array;
+    const v = velRef.current;
+    for (let i = 0; i < count; i++) {
+      v[i * 3] *= 0.96;
+      v[i * 3 + 1] -= 4.2 * dt;
+      v[i * 3 + 2] *= 0.96;
+      arr[i * 3] += v[i * 3] * dt;
+      arr[i * 3 + 1] = Math.max(0.02, arr[i * 3 + 1] + v[i * 3 + 1] * dt);
+      arr[i * 3 + 2] += v[i * 3 + 2] * dt;
+    }
+    attr.needsUpdate = true;
+    const mat = pts.material as THREE.PointsMaterial;
+    mat.opacity = remain * 0.95;
+  });
+
+  return (
+    <points ref={pointsRef} visible={false}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+      </bufferGeometry>
+      <pointsMaterial size={0.026} vertexColors transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} />
+    </points>
+  );
+}
+
 export function Gallery({
   phase,
+  playStep = "need_coin",
   sky,
   topic = "technology",
   rarity = null,
   fullScreen = false,
+  autoCam = true,
   cameraView = "default",
   cameraViewSeq = 0,
+  vendingSlotIndex = null,
+  vendStarted = 0,
+  vendMs = 3500,
   shockAt = 0,
   children,
 }: {
   phase: Phase;
+  playStep?: PlayStep;
   sky: string;
   topic?: GiftTopic;
   rarity?: Rarity | null;
   fullScreen?: boolean;
+  autoCam?: boolean;
   cameraView?: CameraView;
   cameraViewSeq?: number;
+  vendingSlotIndex?: number | null;
+  vendStarted?: number;
+  vendMs?: number;
   shockAt?: number;
   children: ReactNode;
 }) {
   const { scene, camera, controls } = useThree();
-  const realityPose = useRef(new THREE.Vector3(0, 1.25, 5.2));
+  const realityPose = useRef(new THREE.Vector3(0, 1.35, 5.1));
   const theme = THEME_CONFIG[topic] ?? THEME_CONFIG.technology;
   const currentBg = useRef(new THREE.Color(theme.bg));
   const targetBg = useRef(new THREE.Color(theme.bg));
   const gliding = useRef(false);
+  const userOrbited = useRef(false);
   const lastViewSeq = useRef(cameraViewSeq);
+  const lastBeatKey = useRef("");
   const lastShock = useRef(shockAt);
   const shockEnergy = useRef(0);
 
   useEffect(() => {
+    // Only reset manual orbit override when user explicitly picks a preset or turns Auto-Cam on,
+    // NOT while dragging around freely!
     if (cameraViewSeq !== lastViewSeq.current) {
       lastViewSeq.current = cameraViewSeq;
+      userOrbited.current = false;
       gliding.current = true;
     }
   }, [cameraViewSeq]);
+
+  useEffect(() => {
+    const key = `${phase}:${playStep}:${vendingSlotIndex ?? -1}`;
+    if (key !== lastBeatKey.current) {
+      lastBeatKey.current = key;
+    }
+  }, [phase, playStep, vendingSlotIndex]);
 
   useEffect(() => {
     if (shockAt > 0 && shockAt !== lastShock.current) {
@@ -204,7 +327,6 @@ export function Gallery({
     if (ctx) {
       ctx.fillStyle = "#0e172a";
       ctx.fillRect(0, 0, 512, 512);
-      // Terrazzo tile seams & faint speckles
       ctx.strokeStyle = "rgba(148, 163, 184, 0.16)";
       ctx.lineWidth = 4;
       for (let i = 0; i <= 512; i += 128) {
@@ -246,9 +368,9 @@ export function Gallery({
     }
 
     if (fullScreen) {
-      camera.position.lerp(new THREE.Vector3(0, 0.74, 2.08), 0.07);
+      camera.position.lerp(new THREE.Vector3(0, 0.72, 2.02), 1 - Math.exp(-dt * 5.5));
       if (controls && "target" in controls) {
-        (controls.target as THREE.Vector3).lerp(new THREE.Vector3(0, 0.54, 0.96), 0.07);
+        (controls.target as THREE.Vector3).lerp(new THREE.Vector3(0, 0.54, 0.96), 1 - Math.exp(-dt * 5.5));
       }
       return;
     }
@@ -259,7 +381,7 @@ export function Gallery({
       return;
     }
 
-    if (gliding.current) {
+    if (gliding.current && !userOrbited.current) {
       const preset = CAMERA_PRESETS[cameraView];
       camera.position.lerp(preset.pos, 1 - Math.exp(-dt * 6.5));
       if (controls && "target" in controls) {
@@ -268,12 +390,57 @@ export function Gallery({
       if (camera.position.distanceTo(preset.pos) < 0.015) {
         gliding.current = false;
       }
+    } else if (autoCam && !userOrbited.current && cameraView === "default") {
+      // Dynamic game-feel cinematography: track coin insertion -> coil turning & teetering -> chute drop -> plinth reveal!
+      const prog = progressOf(phase, vendStarted, vendMs);
+      let speed = 3.2;
+
+      if (playStep === "coin_entering") {
+        camGoalPos.set(0.56, 1.38, 1.76);
+        camGoalTarget.set(0.52, 1.24, 0.42);
+        speed = 4.2;
+      } else if (playStep === "select_item") {
+        camGoalPos.set(0.14, 1.32, 2.16);
+        camGoalTarget.set(0.05, 1.12, 0.30);
+        speed = 3.6;
+      } else if (playStep === "vending" || phase === "vending") {
+        const spot = vendingSlotIndex !== null ? SHELF_SPOTS[vendingSlotIndex] : null;
+        if (spot && prog < 0.7) {
+          const sx = spot[0];
+          const sy = 1.08 + spot[1];
+          camGoalPos.set(sx * 0.45 + 0.1, sy + 0.06, 1.74);
+          camGoalTarget.set(sx * 0.72, sy - 0.02, 0.14);
+          speed = prog > 0.46 ? 5.0 : 4.2;
+        } else {
+          // Track down into the delivery chute bin!
+          camGoalPos.set(0.02, 0.76, 1.88);
+          camGoalTarget.set(-0.06, 0.34, 0.34);
+          speed = 6.2;
+        }
+      } else if (playStep === "in_tray") {
+        camGoalPos.set(0.0, 0.62, 1.62);
+        camGoalTarget.set(-0.07, 0.24, 0.35);
+        speed = 4.5;
+      } else if (playStep === "collecting" || phase === "revealed") {
+        camGoalPos.set(0.05, 0.86, 1.94);
+        camGoalTarget.set(0.0, 0.48, 0.94);
+        speed = 4.2;
+      } else {
+        camGoalPos.copy(CAMERA_PRESETS.default.pos);
+        camGoalTarget.copy(CAMERA_PRESETS.default.target);
+        speed = 2.6;
+      }
+
+      camera.position.lerp(camGoalPos, 1 - Math.exp(-dt * speed));
+      if (controls && "target" in controls) {
+        (controls.target as THREE.Vector3).lerp(camGoalTarget, 1 - Math.exp(-dt * speed));
+      }
     }
 
     if (shockEnergy.current > 0.005) {
       const s = shockEnergy.current;
-      camera.position.x += Math.sin(performance.now() * 0.09) * 0.012 * s;
-      camera.position.y += Math.cos(performance.now() * 0.11) * 0.01 * s;
+      camera.position.x += Math.sin(performance.now() * 0.09) * 0.014 * s;
+      camera.position.y += Math.cos(performance.now() * 0.11) * 0.011 * s;
       shockEnergy.current *= Math.exp(-dt * 12);
     }
   });
@@ -283,18 +450,21 @@ export function Gallery({
       {phase !== "reality" ? (
         <OrbitControls
           makeDefault
-          enablePan={false}
+          enablePan
+          enableZoom
+          enableRotate
           enableDamping
           dampingFactor={0.08}
           target={[0.0, 1.06, 0.25]}
-          minDistance={1.35}
-          maxDistance={6.2}
-          minPolarAngle={0.78}
-          maxPolarAngle={1.32}
-          minAzimuthAngle={-1.0}
-          maxAzimuthAngle={1.0}
+          minDistance={0.95}
+          maxDistance={7.0}
+          minPolarAngle={0.28}
+          maxPolarAngle={1.48}
+          minAzimuthAngle={-2.4}
+          maxAzimuthAngle={2.4}
           onStart={() => {
             gliding.current = false;
+            userOrbited.current = true;
           }}
         />
       ) : null}
@@ -340,16 +510,13 @@ export function Gallery({
 
       {phase !== "reality" ? (
         <>
-          {/* Polished mall terrazzo floor */}
           <RoundedBox args={[11.2, 0.22, 8.2]} position={[0.2, -0.11, 0.65]} radius={0.04} smoothness={2} receiveShadow>
             <meshStandardMaterial color={theme.floor} map={tileGridTex} metalness={0.42} roughness={0.34} />
           </RoundedBox>
-          {/* Decorative circular arcade rubber mat under the machine */}
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0.35]} receiveShadow>
             <circleGeometry args={[1.45, 48]} />
             <meshStandardMaterial color="#0b1120" roughness={0.85} metalness={0.1} />
           </mesh>
-          {/* Mall rear architectural wall & glowing arcade pillars */}
           <mesh position={[0, 1.85, -2.0]} receiveShadow>
             <planeGeometry args={[13.5, 6.0]} />
             <meshStandardMaterial color={theme.wall} roughness={0.88} />
@@ -366,7 +533,6 @@ export function Gallery({
               </mesh>
             </group>
           ))}
-          {/* Subtle distant arcade booths in the background for Starlight Mall depth */}
           <group position={[-2.5, 0.95, -1.35]} rotation={[0, 0.35, 0]}>
             <RoundedBox args={[0.72, 1.9, 0.56]} radius={0.03} smoothness={2}>
               <meshStandardMaterial color="#0d1326" metalness={0.4} roughness={0.5} />
@@ -429,7 +595,6 @@ function animateCoinArc(
       .multiplyScalar(rem * rem)
       .addScaledVector(coinMid, 2 * rem * smooth)
       .addScaledVector(COIN_SLOT, smooth * smooth);
-    // Final slide straight into the vertical coin slot aperture
     if (coinT >= 0.8) {
       const slide = Math.min(1, (coinT - 0.8) / 0.16);
       target.z -= slide * 0.045;
@@ -443,8 +608,6 @@ function animateCoinArc(
     };
   }
 
-  // Leo (tiptoes) or Maya (joyful jump): Stage 1 picks up/carries coin cleanly to hand-reach beside slot;
-  // Stage 2 lifts/pushes edge-on directly into the vertical slot!
   if (coinT < 0.36) {
     const grabT = VEND_EASE(coinT / 0.36);
     target.copy(from).lerp(KID_HAND_POS, grabT);
@@ -486,49 +649,39 @@ function Steel({ color = "#172030", roughness = 0.28 }: { color?: string; roughn
 function CabinetShell({ accent }: { accent: string }) {
   return (
     <group>
-      {/* Back Cabinet Shell */}
       <RoundedBox args={[1.42, 2.02, 0.10]} radius={0.02} smoothness={2} position={[0.02, -0.02, -0.30]} castShadow>
         <Steel color="#111827" />
       </RoundedBox>
-      {/* Left Structural Pillar */}
       <RoundedBox args={[0.10, 2.02, 0.72]} radius={0.02} smoothness={2} position={[-0.64, -0.02, 0.02]} castShadow>
         <Steel color="#0f172a" />
       </RoundedBox>
-      {/* Interior Mullion between Glass & Right Console */}
       <RoundedBox args={[0.045, 1.98, 0.36]} radius={0.015} smoothness={2} position={[0.455, -0.02, 0.21]} castShadow>
         <Steel color="#1e293b" />
       </RoundedBox>
-      {/* Wide Right Control Console Pillar */}
       <RoundedBox args={[0.24, 2.02, 0.72]} radius={0.02} smoothness={2} position={[0.59, -0.02, 0.02]} castShadow>
         <Steel color="#0c1422" />
       </RoundedBox>
-      {/* Top Roof Cap */}
       <RoundedBox args={[1.48, 0.13, 0.78]} radius={0.02} smoothness={2} position={[0.02, 0.99, 0.04]} castShadow>
         <Steel color="#1b2838" />
       </RoundedBox>
-      {/* Illuminated Top Marquee Frame Trim */}
       <RoundedBox args={[1.28, 0.34, 0.08]} radius={0.02} smoothness={2} position={[0, 1.06, 0.29]}>
         <Steel color="#0f172a" />
       </RoundedBox>
-      <mesh position={[0, 0.90, 0.39]}>
+      <mesh position={[0, 0.9, 0.39]}>
         <boxGeometry args={[1.24, 0.018, 0.02]} />
         <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={1.6} />
       </mesh>
-      {/* Bottom Chassis Skirt */}
       <RoundedBox args={[1.48, 0.12, 0.78]} radius={0.02} smoothness={2} position={[0.02, -1.01, 0.04]} castShadow>
         <Steel color="#090e17" />
       </RoundedBox>
-      {/* Brushed Steel Sill dividing Glass Window (top) from Pickup Bin (bottom) */}
       <mesh position={[-0.07, -0.68, 0.24]} castShadow>
         <boxGeometry args={[1.04, 0.04, 0.28]} />
         <meshPhysicalMaterial color="#334155" metalness={0.85} roughness={0.22} />
       </mesh>
-      {/* Dark interior rear liner behind shelves */}
       <mesh position={[-0.07, 0.12, -0.24]}>
         <planeGeometry args={[1.02, 1.62]} />
         <meshStandardMaterial color="#0b101b" roughness={0.85} />
       </mesh>
-      {/* Subtle Neon Vertical Strip Lights inside left & right inner glass cheeks */}
       <mesh position={[-0.575, 0.14, 0.28]}>
         <boxGeometry args={[0.014, 1.46, 0.018]} />
         <meshStandardMaterial color="#ffffff" emissive={accent} emissiveIntensity={1.3} />
@@ -537,7 +690,15 @@ function CabinetShell({ accent }: { accent: string }) {
         <boxGeometry args={[0.014, 1.46, 0.018]} />
         <meshStandardMaterial color="#ffffff" emissive={accent} emissiveIntensity={1.3} />
       </mesh>
-      {/* Rubber front glass frame gasket */}
+      {/* Subtle diagonal glass reflection strips across front window corners */}
+      <mesh position={[-0.36, 0.56, 0.376]} rotation={[0, 0, -0.55]} raycast={() => null}>
+        <planeGeometry args={[0.025, 0.44]} />
+        <meshBasicMaterial color="#e0f2fe" transparent opacity={0.14} depthWrite={false} />
+      </mesh>
+      <mesh position={[0.24, -0.25, 0.376]} rotation={[0, 0, -0.55]} raycast={() => null}>
+        <planeGeometry args={[0.016, 0.32]} />
+        <meshBasicMaterial color="#e0f2fe" transparent opacity={0.1} depthWrite={false} />
+      </mesh>
       <mesh position={[-0.07, 0.87, 0.365]}>
         <boxGeometry args={[1.04, 0.028, 0.02]} />
         <meshStandardMaterial color="#06090f" roughness={0.85} />
@@ -655,7 +816,6 @@ function HorizontalCoil() {
 
   return (
     <group>
-      {/* Back motor hub */}
       <mesh position={[0, 0, -0.125]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.022, 0.022, 0.018, 12]} />
         <meshStandardMaterial color="#334155" metalness={0.85} roughness={0.35} />
@@ -749,7 +909,6 @@ function PrizeShape({
   if (titleLower.includes("camera")) {
     return (
       <group>
-        {/* Brushed silver & leather body */}
         <RoundedBox args={[0.095, 0.062, 0.036]} radius={0.006} smoothness={2} castShadow>
           <meshStandardMaterial color="#27272a" roughness={0.65} metalness={0.25} />
         </RoundedBox>
@@ -757,7 +916,6 @@ function PrizeShape({
           <boxGeometry args={[0.096, 0.016, 0.037]} />
           <meshStandardMaterial color="#e4e4e7" metalness={0.85} roughness={0.22} />
         </mesh>
-        {/* Lens barrel */}
         <mesh position={[0.006, -0.004, 0.025]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <cylinderGeometry args={[0.022, 0.024, 0.024, 20]} />
           <meshStandardMaterial color="#d4d4d8" metalness={0.9} roughness={0.2} />
@@ -766,7 +924,6 @@ function PrizeShape({
           <cylinderGeometry args={[0.016, 0.016, 0.005, 16]} />
           <meshStandardMaterial color="#0284c7" metalness={0.9} roughness={0.1} emissive="#0ea5e9" emissiveIntensity={0.35} />
         </mesh>
-        {/* Top shutter button */}
         <mesh position={[-0.028, 0.035, 0.004]}>
           <cylinderGeometry args={[0.007, 0.007, 0.006, 12]} />
           <meshStandardMaterial color="#f59e0b" metalness={0.9} roughness={0.2} />
@@ -788,7 +945,6 @@ function PrizeShape({
             emissiveIntensity={isLegendary ? 0.22 : isRare ? 0.15 : 0}
           />
         </RoundedBox>
-        {/* Glowing OLED Screen */}
         <mesh position={[0, isHifi ? 0.018 : 0.002, 0.008]}>
           <planeGeometry args={[0.052, isHifi ? 0.05 : 0.098]} />
           <meshStandardMaterial
@@ -798,7 +954,6 @@ function PrizeShape({
             roughness={0.1}
           />
         </mesh>
-        {/* Hi-fi DAC wheel or Gold Phone Ring */}
         {isHifi ? (
           <mesh position={[0, -0.028, 0.008]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[0.018, 0.018, 0.004, 24]} />
@@ -836,7 +991,6 @@ function PrizeShape({
   if (titleLower.includes("sunglasses")) {
     return (
       <group rotation={[0.18, 0, 0]}>
-        {/* Left & Right frames */}
         <mesh position={[-0.028, 0, 0.01]} castShadow>
           <torusGeometry args={[0.02, 0.0045, 10, 20]} />
           <meshStandardMaterial color="#18181b" metalness={0.7} roughness={0.25} />
@@ -853,12 +1007,10 @@ function PrizeShape({
           <circleGeometry args={[0.018, 16]} />
           <meshPhysicalMaterial color={accentColor} emissive={accentColor} emissiveIntensity={0.4} metalness={0.8} roughness={0.1} transparent opacity={0.85} />
         </mesh>
-        {/* Nose bridge */}
         <mesh position={[0, 0.004, 0.01]}>
           <boxGeometry args={[0.02, 0.005, 0.005]} />
           <meshStandardMaterial color={accentColor} metalness={0.9} roughness={0.2} />
         </mesh>
-        {/* Temple arms */}
         <mesh position={[-0.048, 0.004, -0.02]}>
           <boxGeometry args={[0.004, 0.005, 0.06]} />
           <meshStandardMaterial color={accentColor} metalness={0.7} roughness={0.3} />
@@ -874,17 +1026,14 @@ function PrizeShape({
   if (shape === "watch") {
     return (
       <group rotation={[0.35, 0, 0]}>
-        {/* Wrist strap loop */}
         <mesh castShadow>
           <torusGeometry args={[0.04, 0.011, 10, 24]} />
           <meshStandardMaterial color={isLegendary ? "#eab308" : "#1e293b"} metalness={isLegendary ? 0.95 : 0.4} roughness={0.3} />
         </mesh>
-        {/* Watch case */}
         <mesh position={[0, 0.032, 0.016]} rotation={[Math.PI / 2, 0, 0]} castShadow>
           <cylinderGeometry args={[0.026, 0.026, 0.014, 24]} />
           <meshStandardMaterial color={isLegendary ? "#ffd700" : "#cbd5e1"} metalness={0.92} roughness={0.16} />
         </mesh>
-        {/* Illuminated Watch Dial */}
         <mesh position={[0, 0.032, 0.024]}>
           <circleGeometry args={[0.021, 20]} />
           <meshStandardMaterial color="#020617" emissive={accentColor} emissiveIntensity={isLegendary ? 0.45 : 0.75} />
@@ -897,7 +1046,6 @@ function PrizeShape({
     const macaronColors = ["#c084fc", "#86efac", "#f472b6"];
     return (
       <group>
-        {/* Clear ribbon gift box base */}
         <RoundedBox args={[0.105, 0.028, 0.056]} radius={0.005} smoothness={2} position={[0, -0.012, 0]} castShadow>
           <meshPhysicalMaterial color="#fdf2f8" roughness={0.25} clearcoat={0.5} />
         </RoundedBox>
@@ -924,12 +1072,10 @@ function PrizeShape({
   if (titleLower.includes("truffle")) {
     return (
       <group>
-        {/* Fluted foil wrapper cup */}
         <mesh position={[0, -0.014, 0]} castShadow>
           <cylinderGeometry args={[0.036, 0.026, 0.022, 16]} />
           <meshStandardMaterial color="#451a03" roughness={0.6} />
         </mesh>
-        {/* Faceted 24K Gold Foil Truffle */}
         <mesh position={[0, 0.012, 0]} castShadow>
           <icosahedronGeometry args={[0.032, 1]} />
           <meshStandardMaterial color="#ffd700" metalness={0.96} roughness={0.14} emissive="#f59e0b" emissiveIntensity={0.35} />
@@ -941,16 +1087,13 @@ function PrizeShape({
   if (shape === "chocolate") {
     return (
       <group rotation={[0.18, 0.15, 0]}>
-        {/* Bright outer foil wrapper */}
         <RoundedBox args={[0.095, 0.024, 0.056]} radius={0.004} smoothness={2} position={[-0.012, 0, 0]} castShadow>
           <meshStandardMaterial color="#b91c1c" metalness={0.6} roughness={0.3} />
         </RoundedBox>
-        {/* Gold inner paper liner */}
         <mesh position={[0.016, 0.001, 0]}>
           <boxGeometry args={[0.055, 0.023, 0.053]} />
           <meshStandardMaterial color="#fde047" metalness={0.85} roughness={0.22} />
         </mesh>
-        {/* Exposed rich chocolate bar squares */}
         <mesh position={[0.038, 0.001, 0]} castShadow>
           <boxGeometry args={[0.038, 0.021, 0.048]} />
           <meshStandardMaterial color="#582c16" roughness={0.45} metalness={0.08} />
@@ -962,12 +1105,10 @@ function PrizeShape({
   if (titleLower.includes("headphone")) {
     return (
       <group>
-        {/* Curved Headband */}
-        <mesh position={[0, 0.01, 0]} rotation={[0, 0, 0]} castShadow>
+        <mesh position={[0, 0.01, 0]} castShadow>
           <torusGeometry args={[0.044, 0.007, 10, 24, Math.PI]} />
           <meshStandardMaterial color="#18181b" roughness={0.4} metalness={0.5} />
         </mesh>
-        {/* Left & Right Earcups + Neon Ring */}
         {[-0.044, 0.044].map((ex, i) => (
           <group key={i} position={[ex, -0.005, 0]} rotation={[0, 0, Math.PI / 2]}>
             <mesh castShadow>
@@ -991,7 +1132,6 @@ function PrizeShape({
           <cylinderGeometry args={[0.03, 0.03, 0.095, 20]} />
           <meshStandardMaterial color={accentColor} roughness={0.4} metalness={0.45} />
         </mesh>
-        {/* Glowing end passive bass rings */}
         {[-0.048, 0.048].map((sx) => (
           <mesh key={sx} position={[sx, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
             <torusGeometry args={[0.022, 0.004, 8, 20]} />
@@ -1005,17 +1145,14 @@ function PrizeShape({
   if (titleLower.includes("cap")) {
     return (
       <group>
-        {/* Rounded Crown */}
         <mesh position={[0, 0.005, -0.008]} castShadow>
           <sphereGeometry args={[0.042, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
           <meshStandardMaterial color={accentColor} roughness={0.65} />
         </mesh>
-        {/* Curved Front Visor/Bill */}
         <mesh position={[0, 0.005, 0.036]} rotation={[0.18, 0, 0]} castShadow>
           <cylinderGeometry args={[0.038, 0.044, 0.006, 16, 1, false, -Math.PI * 0.45, Math.PI * 0.9]} />
           <meshStandardMaterial color="#1e293b" roughness={0.5} />
         </mesh>
-        {/* Embroidered Gold Star Patch */}
         <mesh position={[0, 0.024, 0.032]} rotation={[-0.4, 0, 0]}>
           <octahedronGeometry args={[0.009, 0]} />
           <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={0.6} metalness={0.8} roughness={0.2} />
@@ -1024,7 +1161,6 @@ function PrizeShape({
     );
   }
 
-  // Stylized Sneakers default
   return (
     <group>
       {[-0.026, 0.026].map((sx, idx) => (
@@ -1098,7 +1234,6 @@ function CapsulePod({
   return (
     <group>
       <group ref={topDomeRef}>
-        {/* Crystal-clear upper dome so prize inside is ALWAYS clearly visible on shelf and in tray */}
         <mesh position={[0, centerY, 0]}>
           <sphereGeometry args={[r, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
           <meshPhysicalMaterial
@@ -1139,18 +1274,12 @@ function CapsulePod({
   );
 }
 
-function RarityVFX({
-  rarity,
-  active,
-}: {
-  rarity: Rarity | null;
-  active: boolean;
-}) {
+function RarityVFX({ rarity, active }: { rarity: Rarity | null; active: boolean }) {
   const godraysRef = useRef<Group>(null);
   const particlesRef = useRef<THREE.Points>(null);
   const lightRef = useRef<PointLight>(null);
 
-  const particleCount = rarity === "legendary" ? 60 : rarity === "rare" ? 40 : rarity === "impossible" ? 75 : 0;
+  const particleCount = rarity === "legendary" ? 64 : rarity === "rare" ? 42 : rarity === "impossible" ? 80 : 0;
   const [positions, colors] = useMemo(() => {
     if (!particleCount) return [new Float32Array(0), new Float32Array(0)];
     const pos = new Float32Array(particleCount * 3);
@@ -1163,7 +1292,7 @@ function RarityVFX({
     );
 
     for (let i = 0; i < particleCount; i++) {
-      const radius = 0.08 + Math.random() * (rarity === "impossible" ? 0.35 : 0.22);
+      const radius = 0.08 + Math.random() * (rarity === "impossible" ? 0.36 : 0.22);
       const angle = Math.random() * Math.PI * 2;
       const height = (Math.random() - 0.2) * (rarity === "impossible" ? 0.45 : 0.3);
 
@@ -1182,26 +1311,19 @@ function RarityVFX({
   useFrame(({ clock }) => {
     if (!active) return;
     const t = clock.elapsedTime;
-
     if (godraysRef.current) {
       godraysRef.current.rotation.y = t * 0.35;
       const pulse = 0.85 + Math.sin(t * 3) * 0.15;
       godraysRef.current.scale.set(pulse, 1, pulse);
     }
-
     if (particlesRef.current) {
       particlesRef.current.rotation.y = t * (rarity === "impossible" ? 0.8 : 0.45);
       particlesRef.current.position.y = Math.sin(t * 2) * 0.02;
     }
-
     if (lightRef.current) {
-      if (rarity === "rare") {
-        lightRef.current.intensity = 3.5 + Math.sin(t * 6) * 1.5;
-      } else if (rarity === "legendary") {
-        lightRef.current.intensity = 6.0 + Math.sin(t * 4) * 2.5;
-      } else if (rarity === "impossible") {
-        lightRef.current.intensity = Math.sin(t * 40) > 0.1 ? 7.5 : 0.2;
-      }
+      if (rarity === "rare") lightRef.current.intensity = 3.5 + Math.sin(t * 6) * 1.5;
+      else if (rarity === "legendary") lightRef.current.intensity = 6.0 + Math.sin(t * 4) * 2.5;
+      else if (rarity === "impossible") lightRef.current.intensity = Math.sin(t * 40) > 0.1 ? 7.5 : 0.2;
     }
   });
 
@@ -1218,7 +1340,6 @@ function RarityVFX({
         color={rarity === "legendary" ? "#ffd700" : rarity === "rare" ? "#00f5ff" : "#e7b4ff"}
         intensity={3.5}
       />
-
       {rarity === "rare" && (
         <>
           <points ref={particlesRef}>
@@ -1234,7 +1355,6 @@ function RarityVFX({
           </mesh>
         </>
       )}
-
       {rarity === "legendary" && (
         <>
           <group ref={godraysRef} position={[0, 0.05, 0]}>
@@ -1245,20 +1365,12 @@ function RarityVFX({
                 <group key={i} rotation={[0, angle, 0]}>
                   <mesh position={[Math.sin(tilt) * 0.14, 0.22, 0]} rotation={[0, 0, -tilt]}>
                     <cylinderGeometry args={[0.012, 0.05, 0.44, 16, 1, true]} />
-                    <meshBasicMaterial
-                      color="#ffd700"
-                      transparent
-                      opacity={0.32}
-                      side={THREE.DoubleSide}
-                      blending={THREE.AdditiveBlending}
-                      depthWrite={false}
-                    />
+                    <meshBasicMaterial color="#ffd700" transparent opacity={0.32} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} depthWrite={false} />
                   </mesh>
                 </group>
               );
             })}
           </group>
-
           <points ref={particlesRef}>
             <bufferGeometry>
               <bufferAttribute attach="attributes-position" args={[positions, 3]} />
@@ -1266,14 +1378,12 @@ function RarityVFX({
             </bufferGeometry>
             <pointsMaterial size={0.02} vertexColors transparent opacity={0.9} blending={THREE.AdditiveBlending} />
           </points>
-
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]}>
             <circleGeometry args={[0.18, 32]} />
             <meshBasicMaterial color="#ffd700" transparent opacity={0.35} blending={THREE.AdditiveBlending} />
           </mesh>
         </>
       )}
-
       {rarity === "impossible" && (
         <>
           <points ref={particlesRef}>
@@ -1338,38 +1448,75 @@ function RevealedItem({
   rarity,
   stock,
   insidePod = false,
+  spinVelRef,
+  inspectDragRef,
+  hopPulseRef,
 }: {
   product: Product | null;
   rarity: Rarity | null;
   stock: { shape: string; name?: string; color: string; claimed: boolean }[];
   insidePod?: boolean;
+  spinVelRef?: MutableRefObject<{ yaw: number; pitch: number }>;
+  inspectDragRef?: MutableRefObject<boolean>;
+  hopPulseRef?: MutableRefObject<number>;
 }) {
   const itemGroup = useRef<Group>(null);
+  const manualRot = useRef({ y: 0, x: 0 });
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     if (!itemGroup.current) return;
+    const dt = Math.min(0.05, delta);
     if (insidePod) {
       itemGroup.current.position.set(0, 0.045, 0);
       itemGroup.current.rotation.set(0.15, clock.elapsedTime * 0.6, 0);
       return;
     }
+
     const t = clock.elapsedTime;
+    const dragging = Boolean(inspectDragRef?.current);
+    if (spinVelRef && !dragging) {
+      manualRot.current.y += spinVelRef.current.yaw * dt;
+      manualRot.current.x = THREE.MathUtils.clamp(manualRot.current.x + spinVelRef.current.pitch * dt, -0.75, 0.75);
+      spinVelRef.current.yaw *= Math.exp(-dt * 3.5);
+      spinVelRef.current.pitch *= Math.exp(-dt * 4.5);
+      if (Math.abs(spinVelRef.current.yaw) < 0.01) spinVelRef.current.yaw = 0;
+    } else if (spinVelRef && dragging) {
+      manualRot.current.y += spinVelRef.current.yaw;
+      manualRot.current.x = THREE.MathUtils.clamp(manualRot.current.x + spinVelRef.current.pitch, -0.75, 0.75);
+      spinVelRef.current.yaw = 0;
+      spinVelRef.current.pitch = 0;
+    }
+
+    let hopBoost = 0;
+    if (hopPulseRef && hopPulseRef.current > 0.005) {
+      hopBoost = Math.sin(hopPulseRef.current * Math.PI) * 0.09;
+      hopPulseRef.current = Math.max(0, hopPulseRef.current - dt * 2.6);
+    }
+
     if (rarity === "common" || rarity === "uncommon") {
-      itemGroup.current.position.set(0, 0.05 + Math.sin(t * 1.8) * 0.004, 0);
-      itemGroup.current.rotation.set(0, Math.sin(t * 0.6) * 0.25, 0);
+      itemGroup.current.position.set(0, 0.055 + Math.sin(t * 1.8) * 0.004 + hopBoost, 0);
+      itemGroup.current.rotation.set(manualRot.current.x, manualRot.current.y + Math.sin(t * 0.6) * 0.25, 0);
     } else if (rarity === "rare") {
-      itemGroup.current.position.set(0, 0.09 + Math.sin(t * 2.5) * 0.012, 0);
-      itemGroup.current.rotation.set(0, t * 0.75, 0);
+      itemGroup.current.position.set(0, 0.095 + Math.sin(t * 2.5) * 0.012 + hopBoost, 0);
+      itemGroup.current.rotation.set(manualRot.current.x, manualRot.current.y + t * 0.75, 0);
     } else if (rarity === "legendary") {
-      itemGroup.current.position.set(0, 0.15 + Math.sin(t * 2.0) * 0.02, 0);
-      itemGroup.current.rotation.set(Math.sin(t * 1.5) * 0.12, t * 0.55, Math.cos(t * 1.2) * 0.08);
+      itemGroup.current.position.set(0, 0.155 + Math.sin(t * 2.0) * 0.02 + hopBoost, 0);
+      itemGroup.current.rotation.set(
+        manualRot.current.x + Math.sin(t * 1.5) * 0.12,
+        manualRot.current.y + t * 0.55,
+        Math.cos(t * 1.2) * 0.08,
+      );
     } else if (rarity === "impossible") {
       itemGroup.current.position.set(
         Math.sin(t * 15) > 0.85 ? (Math.random() - 0.5) * 0.015 : 0,
-        0.21 + Math.sin(t * 2.8) * 0.025,
+        0.21 + Math.sin(t * 2.8) * 0.025 + hopBoost,
         0,
       );
-      itemGroup.current.rotation.set(Math.sin(t * 2.2) * 0.25, t * 1.4, Math.cos(t * 1.8) * 0.25);
+      itemGroup.current.rotation.set(
+        manualRot.current.x + Math.sin(t * 2.2) * 0.25,
+        manualRot.current.y + t * 1.4,
+        Math.cos(t * 1.8) * 0.25,
+      );
     }
   });
 
@@ -1386,7 +1533,7 @@ function RevealedItem({
   const { shape, name, color } = resolveVisualSpec(product, stock);
 
   return (
-    <group ref={itemGroup} scale={insidePod ? 0.9 : 1.15}>
+    <group ref={itemGroup} scale={insidePod ? 0.9 : 1.18}>
       {shape === "anomaly" ? (
         <QuantumAnomaly color={color} />
       ) : (
@@ -1395,13 +1542,6 @@ function RevealedItem({
     </group>
   );
 }
-
-export const SHELF_FLOORS = [0.46, 0.09, -0.28, -0.65] as const;
-const SHELF_COLS = [-0.43, -0.19, 0.05, 0.29] as const;
-
-export const SHELF_SPOTS: [number, number, number][] = SHELF_FLOORS.flatMap((floorY, rowIdx) =>
-  SHELF_COLS.map((x): [number, number, number] => [x, floorY + 0.084, rowIdx]),
-);
 
 function CoilSlot({
   x,
@@ -1459,35 +1599,37 @@ function CoilSlot({
 
     const progress = Math.min(1, Math.max(0, (performance.now() - vendStarted) / vendMs));
     if (progress < 0.48) {
-      // Coil rotates 360° inching the prize capsule forward against the front lip
       const coilT = progress / 0.48;
-      coilRef.current.rotation.z = coilT * Math.PI * 2;
-      const creep = coilT * 0.132 + Math.sin(coilT * Math.PI * 4) * 0.004;
+      // Helical rotation with realistic notch pulses
+      const pulse = Math.sin(coilT * Math.PI * 12) * 0.04;
+      coilRef.current.rotation.z = coilT * Math.PI * 2 + pulse;
+      const creep = coilT * 0.132 + Math.max(0, Math.sin(coilT * Math.PI * 6)) * 0.004;
       prizeRef.current.position.set(0, Math.abs(Math.sin(coilT * Math.PI * 2)) * 0.006, creep);
       prizeRef.current.rotation.set(coilT * 0.15, 0, 0);
       prizeRef.current.visible = true;
     } else if (progress < 0.69) {
-      // Edge-Teeter Suspense: capsule precariously balanced on front retaining rail
+      // Pendulum edge-teeter suspense: rocks precariously over the lip!
       coilRef.current.rotation.z = Math.PI * 2;
       const hangT = (progress - 0.48) / 0.21;
-      const teeter = Math.sin(hangT * Math.PI * 5.5) * 0.12 + hangT * 0.08;
-      prizeRef.current.position.set(0, -0.016 - Math.max(0, teeter) * 0.03, 0.146);
+      const damp = 1 - hangT * 0.3;
+      const teeter = Math.sin(hangT * Math.PI * 5.2) * 0.14 * damp + hangT * 0.12;
+      prizeRef.current.position.set(0, -0.016 - Math.max(0, teeter) * 0.032, 0.148);
       prizeRef.current.rotation.set(0.64 + teeter, 0, 0);
       prizeRef.current.visible = true;
     } else if (progress < 0.87) {
-      // Breakaway gravity fall & deflector bounce inside front drop chute
+      // Gravity fall with front-glass deflection & angled chute baffle bounce!
       coilRef.current.rotation.z = Math.PI * 2;
       const dropT = (progress - 0.69) / 0.18;
       const floorDrop = -0.84 - y;
       const grav = dropT * dropT;
-      // Subtle bounce forward off angled lower chute baffle at the bottom
-      const baffleKick = dropT > 0.72 ? Math.sin(((dropT - 0.72) / 0.28) * Math.PI) * 0.035 : 0;
+      const glassBounceZ = dropT > 0.35 && dropT < 0.72 ? -Math.sin(((dropT - 0.35) / 0.37) * Math.PI) * 0.03 : 0;
+      const baffleKickY = dropT > 0.72 ? Math.sin(((dropT - 0.72) / 0.28) * Math.PI) * 0.042 : 0;
       prizeRef.current.position.set(
-        -x * Math.max(0, (dropT - 0.6) * 0.8),
-        -0.016 + floorDrop * grav + baffleKick,
-        0.15 + dropT * 0.09,
+        -x * Math.max(0, (dropT - 0.58) * 0.82),
+        -0.016 + floorDrop * grav + baffleKickY,
+        0.155 + dropT * 0.095 + glassBounceZ,
       );
-      prizeRef.current.rotation.set(0.64 + dropT * 5.2, dropT * 1.4, dropT * 0.9);
+      prizeRef.current.rotation.set(0.64 + dropT * 6.0, dropT * 1.6, dropT * 1.1);
       prizeRef.current.visible = true;
     } else {
       coilRef.current.rotation.z = Math.PI * 2;
@@ -1516,12 +1658,9 @@ function CoilSlot({
         gl.domElement.style.cursor = "";
       }}
     >
-      {/* Horizontal 3D helical steel coil */}
       <group ref={coilRef}>
         <HorizontalCoil />
       </group>
-
-      {/* Prize nestled inside its crystal collectible capsule right in the coil */}
       <group ref={prizeRef} visible={hasItem}>
         {mark ? (
           <>
@@ -1532,8 +1671,6 @@ function CoilSlot({
           </>
         ) : null}
       </group>
-
-      {/* Glowing slot tag & $1 badge on the front shelf lip */}
       <mesh position={[0, floorY - y + 0.01, 0.135]}>
         <planeGeometry args={[0.094, 0.032]} />
         <meshBasicMaterial
@@ -1554,7 +1691,7 @@ function Shelves({
   vendingSlotIndex = null,
   isVending = false,
   vendStarted = 0,
-  vendMs = 3400,
+  vendMs = 3500,
   accent = "#00f5ff",
   onSelectSlot,
 }: {
@@ -1573,19 +1710,16 @@ function Shelves({
     <group>
       {[0.83, ...SHELF_FLOORS].map((floorY, shelfIdx) => (
         <group key={floorY} position={[-0.07, floorY, -0.02]}>
-          {/* Matte steel shelf tray */}
           <mesh receiveShadow>
             <boxGeometry args={[1.01, 0.018, 0.28]} />
             <meshStandardMaterial color="#111d2e" roughness={0.62} metalness={0.45} />
           </mesh>
-          {/* Under-shelf LED diffuser strip lighting up the shelf below */}
           {shelfIdx < 4 ? (
             <mesh position={[0, -0.011, 0.08]}>
               <boxGeometry args={[0.96, 0.005, 0.018]} />
               <meshStandardMaterial color="#ffffff" emissive={shelfIdx === activeTopicIndex ? accent : "#94a3b8"} emissiveIntensity={shelfIdx === activeTopicIndex ? 2.0 : 0.7} />
             </mesh>
           ) : null}
-          {/* Front shelf price rail */}
           {shelfIdx > 0 ? (
             <mesh position={[0, 0.01, 0.14]}>
               <boxGeometry args={[1.01, 0.028, 0.012]} />
@@ -1601,7 +1735,6 @@ function Shelves({
         </group>
       ))}
 
-      {/* Vertical clear acrylic column dividers between columns 1|2|3|4 */}
       {[-0.31, -0.07, 0.17].map((divX) => (
         <mesh key={divX} position={[divX, 0.09, -0.02]} raycast={() => null}>
           <boxGeometry args={[0.005, 1.46, 0.25]} />
@@ -1707,6 +1840,7 @@ function RightBezelControls({
   activeCode,
   coinGlow,
   nudgeWarn,
+  coinNearSlotRef,
   onCoinClick,
   onCoinReturn,
   onKeyPress,
@@ -1716,6 +1850,7 @@ function RightBezelControls({
   activeCode: string | null;
   coinGlow: string;
   nudgeWarn?: boolean;
+  coinNearSlotRef: MutableRefObject<boolean>;
   onCoinClick: () => void;
   onCoinReturn?: () => void;
   onKeyPress: (key: string) => void;
@@ -1723,19 +1858,31 @@ function RightBezelControls({
   const { gl } = useThree();
   const [ledTex, setLedTex] = useState<THREE.CanvasTexture | null>(null);
   const [returnPressed, setReturnPressed] = useState(false);
+  const haloRef = useRef<MeshStandardMaterial>(null);
+
+  useFrame(({ clock }) => {
+    if (!haloRef.current) return;
+    if (coinNearSlotRef.current) {
+      haloRef.current.emissive.set("#34d399");
+      haloRef.current.emissiveIntensity = 2.8 + Math.sin(clock.elapsedTime * 16) * 0.8;
+      haloRef.current.opacity = 0.95;
+    } else if (playStep === "need_coin" || playStep === "revealed") {
+      haloRef.current.emissive.set(coinGlow);
+      haloRef.current.emissiveIntensity = 1.2 + Math.sin(clock.elapsedTime * 4) * 0.4;
+      haloRef.current.opacity = 0.55;
+    } else {
+      haloRef.current.opacity = 0.08;
+    }
+  });
 
   const ledState = useMemo(() => {
-    if (nudgeWarn) {
-      return { line1: "WARN: TILT!", line2: "DO NOT SHAKE", color: "#f43f5e" };
-    }
+    if (nudgeWarn) return { line1: "WARN: TILT!", line2: "DO NOT SHAKE", color: "#f43f5e" };
     if (playStep === "need_coin") {
       return activeCode
         ? { line1: `SLOT ${activeCode} $1`, line2: "INSERT COIN", color: "#fbbf24" }
         : { line1: "READY $1.00", line2: "INSERT COIN", color: "#fbbf24" };
     }
-    if (playStep === "coin_entering") {
-      return { line1: "VALIDATOR", line2: "READING...", color: "#38bdf8" };
-    }
+    if (playStep === "coin_entering") return { line1: "VALIDATOR", line2: "READING...", color: "#38bdf8" };
     if (playStep === "select_item") {
       return {
         line1: "CREDIT $1.00",
@@ -1743,15 +1890,9 @@ function RightBezelControls({
         color: "#34d399",
       };
     }
-    if (playStep === "vending") {
-      return { line1: "MOTOR ON", line2: `COIL ${activeCode ?? ""}`, color: "#38bdf8" };
-    }
-    if (playStep === "in_tray") {
-      return { line1: "DROPPED!", line2: "PUSH FLAP", color: "#34d399" };
-    }
-    if (playStep === "collecting") {
-      return { line1: "OPENING...", line2: "ENJOY!", color: "#facc15" };
-    }
+    if (playStep === "vending") return { line1: "MOTOR ON", line2: `COIL ${activeCode ?? ""}`, color: "#38bdf8" };
+    if (playStep === "in_tray") return { line1: "DROPPED!", line2: "PUSH FLAP", color: "#34d399" };
+    if (playStep === "collecting") return { line1: "OPENING...", line2: "ENJOY!", color: "#facc15" };
     return { line1: "DISPENSED", line2: "PLAY AGAIN", color: "#e2e8f0" };
   }, [playStep, typedCode, activeCode, nudgeWarn]);
 
@@ -1800,13 +1941,10 @@ function RightBezelControls({
 
   return (
     <group position={[0.59, 0.06, 0.378]}>
-      {/* Sculpted Slate Control Fascia */}
       <mesh position={[0, 0.02, 0]}>
         <boxGeometry args={[0.19, 0.88, 0.016]} />
         <meshStandardMaterial color="#070d1a" roughness={0.4} metalness={0.5} />
       </mesh>
-
-      {/* Large Digital VFD Screen (world y = 1.48) */}
       {ledTex ? (
         <mesh position={[0, 0.34, 0.01]}>
           <planeGeometry args={[0.165, 0.082]} />
@@ -1814,7 +1952,6 @@ function RightBezelControls({
         </mesh>
       ) : null}
 
-      {/* Brushed Chrome Coin Acceptor (world y = 1.32) */}
       <group
         position={[0, 0.18, 0.012]}
         onClick={(e) => {
@@ -1829,20 +1966,17 @@ function RightBezelControls({
         }}
       >
         <RoundedBox args={[0.12, 0.11, 0.018]} radius={0.006} smoothness={2}>
-          <meshPhysicalMaterial
-            color="#334155"
-            metalness={0.88}
-            roughness={0.2}
-            emissive={playStep === "need_coin" || playStep === "revealed" ? coinGlow : "#000000"}
-            emissiveIntensity={playStep === "need_coin" || playStep === "revealed" ? 0.25 : 0}
-          />
+          <meshPhysicalMaterial color="#334155" metalness={0.88} roughness={0.2} />
         </RoundedBox>
-        {/* Dark Vertical Coin Slit */}
+        {/* Glowing magnetic coin slot alignment halo */}
+        <mesh position={[0, 0.008, 0.011]}>
+          <ringGeometry args={[0.032, 0.038, 24]} />
+          <meshStandardMaterial ref={haloRef} color="#fbbf24" emissive={coinGlow} emissiveIntensity={1.2} transparent opacity={0.55} />
+        </mesh>
         <mesh position={[0, 0.008, 0.01]}>
           <boxGeometry args={[0.011, 0.056, 0.008]} />
           <meshStandardMaterial color="#020408" roughness={0.2} metalness={0.95} />
         </mesh>
-        {/* Coin Guide Arrow Light */}
         <mesh position={[0.028, 0.008, 0.01]}>
           <circleGeometry args={[0.007, 12]} />
           <meshStandardMaterial
@@ -1851,7 +1985,6 @@ function RightBezelControls({
             emissiveIntensity={2.0}
           />
         </mesh>
-        {/* Chrome Coin Return Push Button */}
         <mesh
           position={[-0.032, -0.028, returnPressed ? 0.007 : 0.012]}
           onClick={(e) => {
@@ -1870,20 +2003,13 @@ function RightBezelControls({
           }}
         >
           <boxGeometry args={[0.026, 0.022, 0.012]} />
-          <meshStandardMaterial
-            color={playStep === "select_item" ? "#ef4444" : "#64748b"}
-            metalness={0.7}
-            roughness={0.25}
-          />
+          <meshStandardMaterial color={playStep === "select_item" ? "#ef4444" : "#64748b"} metalness={0.7} roughness={0.25} />
         </mesh>
       </group>
 
-      {/* Tactile 3D Push Keypad (A-D, 1-4, CLR/OK) */}
       <group position={[0, -0.02, 0.004]}>
         {keys.map((k) => {
-          const isTyped =
-            (typedCode && typedCode.includes(k.label)) ||
-            (activeCode && activeCode.includes(k.label));
+          const isTyped = (typedCode && typedCode.includes(k.label)) || (activeCode && activeCode.includes(k.label));
           return (
             <KeypadButton
               key={k.label}
@@ -1898,7 +2024,6 @@ function RightBezelControls({
         })}
       </group>
 
-      {/* Lower Coin Return Dish */}
       <group position={[0, -0.28, 0.012]}>
         <RoundedBox args={[0.095, 0.095, 0.022]} radius={0.01} smoothness={2}>
           <meshStandardMaterial color="#090d16" metalness={0.85} roughness={0.25} />
@@ -1916,7 +2041,7 @@ export function Machine({
   phase,
   playStep = "need_coin",
   coinStarted = 0,
-  coinMs = 1100,
+  coinMs = 1150,
   vendStarted,
   vendMs,
   collectStarted = 0,
@@ -1970,20 +2095,38 @@ export function Machine({
   const binLight = useRef<PointLight>(null);
   const rig = useRef<Group>(null);
   const lamp = useRef<MeshStandardMaterial>(null);
+
   const held = useRef(false);
+  const coinNearSlotRef = useRef(false);
   const wasCoinEntering = useRef(false);
   const playedWhir = useRef(false);
   const playedTeeter = useRef(false);
   const playedThud = useRef(false);
   const impactAt = useRef(0);
   const dragStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const manualFlapRef = useRef<number | null>(null);
+
+  // Interactive 3D prize spin/inspect refs
+  const spinVelRef = useRef({ yaw: 0, pitch: 0 });
+  const inspectDragRef = useRef(false);
+  const hopPulseRef = useRef(0);
+
+  // Physics burst triggers
+  const [coinBurstAt, setCoinBurstAt] = useState(0);
+  const [binBurstAt, setBinBurstAt] = useState(0);
+  const [popBurstAt, setPopBurstAt] = useState(0);
+
   const insertRef = useRef(onInsert);
   const allowRef = useRef(canInsert);
+  const collectRef = useRef(onCollect);
   insertRef.current = onInsert;
   allowRef.current = canInsert;
+  collectRef.current = onCollect;
+
   const { camera, gl, controls } = useThree();
   const rarity: Rarity | null = product?.rarity ?? null;
-  const trayTagTex = useMemo(() => getTrayTagTexture("PUSH TO OPEN!"), []);
+  const trayTagTex = useMemo(() => getTrayTagTexture("PUSH / DRAG OPEN!"), []);
+  const capsuleOpenRef = useRef(0);
 
   const activeSlotCode =
     vendingSlotIndex !== null
@@ -1992,7 +2135,10 @@ export function Machine({
         ? (COIL_CODES[targetedSlotIndex] ?? null)
         : null;
 
-  const capsuleOpenRef = useRef(0);
+  useEffect(() => {
+    if (playStep === "coin_entering") setCoinBurstAt(performance.now());
+    else if (playStep === "revealed" && phase === "revealed") setPopBurstAt(performance.now());
+  }, [playStep, phase]);
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
@@ -2017,6 +2163,7 @@ export function Machine({
       if (!playedThud.current && progress >= 0.85) {
         playedThud.current = true;
         impactAt.current = performance.now();
+        setBinBurstAt(impactAt.current);
         playBinThud();
       }
     }
@@ -2033,7 +2180,7 @@ export function Machine({
     }
 
     if (binLight.current) {
-      binLight.current.intensity = playStep === "in_tray" ? 2.4 + Math.sin(t * 7) * 0.7 : 0.2;
+      binLight.current.intensity = playStep === "in_tray" ? 2.5 + Math.sin(t * 7) * 0.7 : 0.2;
     }
 
     if (lamp.current) {
@@ -2086,8 +2233,9 @@ export function Machine({
     if (flap.current) {
       let angle = 0;
       const sinceImpact = impactAt.current > 0 ? (performance.now() - impactAt.current) / 1000 : 99;
-      if (sinceImpact < 0.85 && vending) {
-        // Spring damped kick outward when heavy capsule slams against flap
+      if (manualFlapRef.current !== null && playStep === "in_tray") {
+        angle = manualFlapRef.current;
+      } else if (sinceImpact < 0.85 && vending) {
         angle = -Math.abs(Math.sin(sinceImpact * 16)) * Math.exp(-sinceImpact * 4.5) * 0.65;
       } else if (playStep === "collecting" && collectStarted > 0) {
         const ct = Math.min(1, (performance.now() - collectStarted) / COLLECT_MS);
@@ -2097,7 +2245,7 @@ export function Machine({
       } else if (phase === "idle") {
         angle = twitch.flap;
       }
-      flap.current.rotation.x = angle;
+      flap.current.rotation.x = THREE.MathUtils.lerp(flap.current.rotation.x, angle, 0.35);
     }
 
     if (coin.current) {
@@ -2110,17 +2258,24 @@ export function Machine({
 
       if (held.current) {
         mesh.visible = true;
-        // Tilt edge-on as player drags close to the vertical coin slot!
-        const closeness = THREE.MathUtils.clamp(1 - mesh.position.distanceTo(COIN_SLOT) / 0.5, 0, 1);
-        mesh.rotation.set(THREE.MathUtils.lerp(Math.PI / 2, 0, closeness), closeness * (Math.PI / 2), closeness * (Math.PI / 2));
-        mesh.scale.setScalar(THREE.MathUtils.lerp(0.65, 0.45, closeness));
+        const dist = mesh.position.distanceTo(COIN_SLOT);
+        coinNearSlotRef.current = dist < 0.38;
+        const mag = THREE.MathUtils.clamp(1 - dist / 0.48, 0, 1);
+        // Subtle magnetic centering pull when right over slot
+        if (dist < 0.24) {
+          mesh.position.lerp(COIN_SLOT, 0.14);
+        }
+        mesh.rotation.set(THREE.MathUtils.lerp(Math.PI / 2, 0, mag), mag * (Math.PI / 2), mag * (Math.PI / 2));
+        mesh.scale.setScalar(THREE.MathUtils.lerp(0.65, 0.44, mag));
       } else if (enteringNow && coinStarted > 0) {
+        coinNearSlotRef.current = false;
         const coinT = Math.min(1, Math.max(0, (performance.now() - coinStarted) / coinMs));
         const pose = animateCoinArc(coinLaunch, coinT, mesh.position, coinPlayer);
         mesh.visible = pose.visible;
         mesh.rotation.set(pose.rotX, pose.rotY, pose.rollZ);
         mesh.scale.setScalar(pose.scale);
       } else if (playStep === "need_coin" || playStep === "revealed") {
+        coinNearSlotRef.current = false;
         mesh.visible = true;
         coinBob.copy(COIN_REST);
         coinBob.y += Math.sin(t * 2.2) * 0.008;
@@ -2128,22 +2283,21 @@ export function Machine({
         mesh.rotation.set(Math.PI / 2 - 0.12, Math.sin(t * 1.4) * 0.15, 0);
         mesh.scale.setScalar(0.62);
       } else {
+        coinNearSlotRef.current = false;
         mesh.visible = false;
       }
     }
 
     if (drop.current) {
       if (vending && progress >= 0.85) {
-        // Capsule settles inside lower pickup pocket behind flap
         const settle = (progress - 0.85) / 0.15;
         drop.current.visible = true;
         drop.current.position.set(-0.07, 0.22 + (1 - settle) * 0.08, 0.24 + settle * 0.03);
         drop.current.rotation.set(0.2 * (1 - settle), settle * 2.2, 0);
         capsuleOpenRef.current = 0;
       } else if (playStep === "in_tray") {
-        // Sitting unmistakably inside illuminated bin behind the smoked clear PUSH door
         drop.current.visible = true;
-        drop.current.position.set(-0.07, 0.20, 0.27);
+        drop.current.position.set(-0.07, 0.2, 0.27);
         drop.current.rotation.set(0.08, Math.sin(t * 2.2) * 0.28, 0);
         capsuleOpenRef.current = 0;
       } else if (playStep === "collecting" && collectStarted > 0) {
@@ -2152,7 +2306,7 @@ export function Machine({
         drop.current.visible = true;
         drop.current.position.set(
           THREE.MathUtils.lerp(-0.07, 0, eased),
-          THREE.MathUtils.lerp(0.20, 0.42, eased) + Math.sin(ct * Math.PI) * 0.16,
+          THREE.MathUtils.lerp(0.2, 0.42, eased) + Math.sin(ct * Math.PI) * 0.16,
           THREE.MathUtils.lerp(0.27, 0.96, eased),
         );
         drop.current.rotation.set(0, eased * Math.PI * 0.5, 0);
@@ -2178,9 +2332,8 @@ export function Machine({
       <group position={[0, 1.08, 0]}>
         <CabinetShell accent={theme.lamp} />
 
-        {/* Front Glass Pane — raycast disabled unless vending & user taps/nudges glass */}
         <mesh
-          position={[-0.07, 0.10, 0.37]}
+          position={[-0.07, 0.1, 0.37]}
           castShadow
           raycast={canNudgeGlass ? undefined : () => null}
           onClick={(e) => {
@@ -2190,7 +2343,7 @@ export function Machine({
             }
           }}
         >
-          <boxGeometry args={[1.02, 1.50, 0.008]} />
+          <boxGeometry args={[1.02, 1.5, 0.008]} />
           <meshPhysicalMaterial
             color="#a5f3fc"
             transmission={0.93}
@@ -2219,19 +2372,18 @@ export function Machine({
 
         <pointLight ref={bulb} position={[-0.07, 0.38, 0.25]} intensity={2.2} distance={2.5} color={theme.bulb} />
 
-        {/* Right console beacon lamp */}
         <mesh position={[0.59, 0.56, 0.375]}>
           <sphereGeometry args={[0.022, 12, 12]} />
           <meshStandardMaterial ref={lamp} color={theme.lamp} emissive={theme.lamp} emissiveIntensity={2.2} />
         </mesh>
 
-        {/* Right Bezel: Large LED Screen, Coin Slot, Return Lever & 3D Keypad */}
         <RightBezelControls
           playStep={playStep}
           typedCode={typedCode}
           activeCode={activeSlotCode}
           coinGlow={theme.coinGlow}
           nudgeWarn={nudgeWarn}
+          coinNearSlotRef={coinNearSlotRef}
           onCoinClick={() => {
             if (coinInteractive) insertRef.current();
           }}
@@ -2239,16 +2391,14 @@ export function Machine({
           onKeyPress={(k) => onKeyPress?.(k)}
         />
 
-        {/* Side Coin Rest Stand attached to Right Wall (holds stacked tokens & interactive coin) */}
         <group position={[0.82, -0.14, 0.44]}>
-          <RoundedBox args={[0.20, 0.024, 0.18]} radius={0.006} smoothness={2} castShadow>
+          <RoundedBox args={[0.2, 0.024, 0.18]} radius={0.006} smoothness={2} castShadow>
             <meshPhysicalMaterial color="#1e293b" metalness={0.75} roughness={0.25} />
           </RoundedBox>
           <mesh position={[-0.1, 0, -0.02]}>
             <boxGeometry args={[0.04, 0.018, 0.06]} />
             <meshStandardMaterial color="#334155" metalness={0.85} roughness={0.25} />
           </mesh>
-          {/* Decorative stacked pocket coins sitting in corner of tray */}
           {[0, 1, 2].map((ci) => (
             <mesh key={ci} position={[-0.045, 0.018 + ci * 0.009, -0.035]}>
               <cylinderGeometry args={[0.028, 0.028, 0.008, 20]} />
@@ -2257,30 +2407,58 @@ export function Machine({
           ))}
         </group>
 
-        {/* Recessed Pickup Chute Cavity (under Shelf D, world y = 0.08..0.40) */}
         <group position={[-0.07, -0.84, 0.21]}>
           <mesh position={[0, -0.11, 0]}>
             <boxGeometry args={[0.88, 0.02, 0.28]} />
             <meshStandardMaterial color="#0b1120" metalness={0.7} roughness={0.35} />
           </mesh>
-          {/* Rear angled chute ramp */}
           <mesh position={[0, -0.01, -0.09]} rotation={[0.55, 0, 0]}>
             <boxGeometry args={[0.88, 0.22, 0.016]} />
             <meshStandardMaterial color="#17253b" metalness={0.75} roughness={0.3} />
           </mesh>
-          {/* Interior pocket pickup LED */}
           <pointLight ref={binLight} position={[0, 0.06, 0.05]} intensity={0.2} distance={0.7} color="#34d399" />
         </group>
 
-        {/* Hinged Clear-Smoked "PUSH" Delivery Flap (world hinge y = 0.37) */}
+        {/* Interactive Hinged PUSH Flap — drag up OR click to open! */}
         <group
           ref={flap}
           position={[-0.07, -0.71, 0.35]}
-          onClick={(e) => {
-            if (playStep === "in_tray") {
-              e.stopPropagation();
-              onCollect?.();
-            }
+          onPointerDown={(e) => {
+            if (playStep !== "in_tray") return;
+            e.stopPropagation();
+            const startY = e.clientY;
+            const orbit = controls as { enabled?: boolean } | null;
+            if (orbit) orbit.enabled = false;
+            gl.domElement.style.cursor = "grabbing";
+            manualFlapRef.current = -0.25;
+            let draggedFar = false;
+
+            const onMove = (ev: PointerEvent) => {
+              const dy = startY - ev.clientY;
+              const openRatio = THREE.MathUtils.clamp(dy / 90, 0, 1);
+              manualFlapRef.current = -0.2 - openRatio * 0.95;
+              if (openRatio > 0.45 && !draggedFar) {
+                draggedFar = true;
+                cleanup();
+                collectRef.current?.();
+              }
+            };
+            const cleanup = () => {
+              window.removeEventListener("pointermove", onMove);
+              window.removeEventListener("pointerup", onUp);
+              gl.domElement.style.cursor = "";
+              if (orbit) orbit.enabled = true;
+              manualFlapRef.current = null;
+            };
+            const onUp = (ev: PointerEvent) => {
+              const moved = Math.abs(startY - ev.clientY);
+              cleanup();
+              if (!draggedFar && moved < 16) {
+                collectRef.current?.();
+              }
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
           }}
           onPointerOver={() => {
             if (playStep === "in_tray") gl.domElement.style.cursor = "pointer";
@@ -2289,12 +2467,10 @@ export function Machine({
             gl.domElement.style.cursor = "";
           }}
         >
-          {/* Chrome hinge bar */}
           <mesh position={[0, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
             <cylinderGeometry args={[0.008, 0.008, 0.86, 12]} />
             <meshStandardMaterial color="#cbd5e1" metalness={0.9} roughness={0.2} />
           </mesh>
-          {/* Translucent smoked polycarbonate door */}
           <mesh position={[0, -0.125, 0.006]}>
             <boxGeometry args={[0.84, 0.22, 0.01]} />
             <meshPhysicalMaterial
@@ -2308,7 +2484,6 @@ export function Machine({
               clearcoat={0.7}
             />
           </mesh>
-          {/* Chrome bottom handle bar */}
           <mesh position={[0, -0.22, 0.016]}>
             <boxGeometry args={[0.64, 0.022, 0.016]} />
             <meshStandardMaterial color="#e2e8f0" metalness={0.92} roughness={0.18} />
@@ -2327,7 +2502,6 @@ export function Machine({
         </mesh>
       </group>
 
-      {/* Velvet & Chrome Front Display Showcase Plinth */}
       <group position={[0, 0.13, 0.96]}>
         <RoundedBox args={[0.78, 0.26, 0.52]} radius={0.025} smoothness={2} castShadow receiveShadow>
           <meshPhysicalMaterial color="#0f172a" metalness={0.65} roughness={0.32} clearcoat={0.25} />
@@ -2371,6 +2545,8 @@ export function Machine({
             held.current = false;
             if ((nearSlot || movedPx < 10) && coinInteractive) {
               insertRef.current();
+            } else {
+              playCoinPickup();
             }
           };
           gl.domElement.addEventListener("pointermove", place);
@@ -2400,34 +2576,86 @@ export function Machine({
         </group>
       </group>
 
-      {/* Dispensed Capsule & Unboxed Prize */}
+      {/* Physics Spark Bursts */}
+      <BurstParticles triggerAt={coinBurstAt} origin={[0.59, 1.32, 0.41]} color="#fbbf24" count={24} speed={1.2} />
+      <BurstParticles triggerAt={binBurstAt} origin={[-0.07, 0.24, 0.34]} color="#34d399" count={28} speed={1.4} />
+      <BurstParticles
+        triggerAt={popBurstAt}
+        origin={[0, 0.56, 0.96]}
+        color={podColor}
+        count={rarity === "legendary" ? 64 : rarity === "rare" ? 44 : 28}
+        speed={rarity === "legendary" ? 2.4 : 1.7}
+      />
+
+      {/* Interactive Dispensed Capsule & Inspectable 3D Prize */}
       <group
         ref={drop}
         position={[0, 0.42, 0.96]}
-        onClick={(e) => {
+        onPointerDown={(e) => {
           if (playStep === "in_tray") {
             e.stopPropagation();
-            onCollect?.();
+            collectRef.current?.();
+            return;
+          }
+          if (phase === "revealed" && playStep === "revealed") {
+            e.stopPropagation();
+            let lastX = e.clientX;
+            let lastY = e.clientY;
+            let moved = 0;
+            inspectDragRef.current = true;
+            const orbit = controls as { enabled?: boolean } | null;
+            if (orbit) orbit.enabled = false;
+            gl.domElement.style.cursor = "grabbing";
+
+            const onMove = (ev: PointerEvent) => {
+              const dx = ev.clientX - lastX;
+              const dy = ev.clientY - lastY;
+              moved += Math.hypot(dx, dy);
+              lastX = ev.clientX;
+              lastY = ev.clientY;
+              spinVelRef.current.yaw += dx * 0.014;
+              spinVelRef.current.pitch += dy * 0.01;
+            };
+            const onUp = () => {
+              window.removeEventListener("pointermove", onMove);
+              window.removeEventListener("pointerup", onUp);
+              inspectDragRef.current = false;
+              gl.domElement.style.cursor = "grab";
+              if (orbit) orbit.enabled = true;
+              if (moved < 6) {
+                hopPulseRef.current = 1;
+                playCoinPickup();
+              } else {
+                // Fling momentum!
+                spinVelRef.current.yaw = THREE.MathUtils.clamp((lastX - e.clientX) * 0.06, -6, 6);
+              }
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
           }
         }}
         onPointerOver={() => {
           if (playStep === "in_tray") gl.domElement.style.cursor = "pointer";
+          else if (phase === "revealed" && playStep === "revealed") gl.domElement.style.cursor = "grab";
         }}
         onPointerOut={() => {
-          gl.domElement.style.cursor = "";
+          if (!inspectDragRef.current) gl.domElement.style.cursor = "";
         }}
       >
-        <CapsulePod
-          openAmountRef={capsuleOpenRef}
-          rarity={rarity}
-          color={podColor}
-        />
+        <CapsulePod openAmountRef={capsuleOpenRef} rarity={rarity} color={podColor} />
         {playStep === "in_tray" || playStep === "collecting" ? (
           <RevealedItem product={product} rarity={rarity} stock={stock} insidePod />
         ) : null}
         {phase === "revealed" && playStep === "revealed" ? (
           <>
-            <RevealedItem product={product} rarity={rarity} stock={stock} />
+            <RevealedItem
+              product={product}
+              rarity={rarity}
+              stock={stock}
+              spinVelRef={spinVelRef}
+              inspectDragRef={inspectDragRef}
+              hopPulseRef={hopPulseRef}
+            />
             <RarityVFX rarity={rarity} active />
           </>
         ) : null}

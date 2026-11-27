@@ -25,7 +25,7 @@ import { loadCabinet, remember, shareUrl, type CabinetItem } from "./cabinet";
 import { isHighRarity, type Product } from "./generate";
 import { displayLine, noteVisit, type Readout } from "./machine/personality";
 import { isSeed } from "./rng";
-import { Crowd } from "./scene/Crowd";
+import { Crowd, type WalkKeys } from "./scene/Crowd";
 import { Gallery, Machine, type CameraView, type Phase } from "./scene/Machine";
 import { WorldCopy } from "./scene/Labels";
 import { Reality } from "./scene/Reality";
@@ -122,6 +122,7 @@ export function App() {
   const [shockAt, setShockAt] = useState(0);
   const [cameraView, setCameraView] = useState<CameraView>("default");
   const [cameraViewSeq, setCameraViewSeq] = useState(0);
+  const [autoCam, setAutoCam] = useState(true);
   const [muted, setMuted] = useState(() => isAudioMuted());
   const [arrivalSeq, setArrivalSeq] = useState(1);
   const [isFullScreenTakeover, setIsFullScreenTakeover] = useState(false);
@@ -139,6 +140,10 @@ export function App() {
   const timers = useRef<number[]>([]);
   const copyTimer = useRef<number | null>(null);
   const rouletteActive = useRef(false);
+  const walkKeysRef = useRef<WalkKeys>({ up: false, down: false, left: false, right: false });
+  const setWalkDirection = (dir: keyof WalkKeys, pressed: boolean) => {
+    walkKeysRef.current[dir] = pressed;
+  };
   const targetedSlotRef = useRef<number | null>(null);
   targetedSlotRef.current = targetedSlotIndex;
   const typedCodeRef = useRef("");
@@ -233,7 +238,7 @@ export function App() {
       setMark(performance.now());
       if (next.rarity === "impossible") {
         setIsFullScreenTakeover(true);
-      } else if (mode === "vend" && next.rarity === "legendary") {
+      } else if (mode === "vend" && next.rarity === "legendary" && !autoCam) {
         focusCamera("plinth");
       }
       if (next.type === "sound" && next.payload.kind === "sound" && mode === "vend") {
@@ -588,6 +593,45 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
+  // Directional arrow keys walk the 3D family on the arcade floor (leaving A-D/1-4 for keypad!)
+  useEffect(() => {
+    const clearWalk = () => {
+      walkKeysRef.current.up = false;
+      walkKeysRef.current.down = false;
+      walkKeysRef.current.left = false;
+      walkKeysRef.current.right = false;
+    };
+    const keyToDir = (key: string): keyof WalkKeys | null => {
+      if (key === "ArrowUp") return "up";
+      if (key === "ArrowDown") return "down";
+      if (key === "ArrowLeft") return "left";
+      if (key === "ArrowRight") return "right";
+      return null;
+    };
+    const onArrowDown = (e: KeyboardEvent) => {
+      if (showJourney) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      const dir = keyToDir(e.key);
+      if (!dir) return;
+      e.preventDefault();
+      walkKeysRef.current[dir] = true;
+    };
+    const onArrowUp = (e: KeyboardEvent) => {
+      const dir = keyToDir(e.key);
+      if (dir) walkKeysRef.current[dir] = false;
+    };
+    window.addEventListener("keydown", onArrowDown);
+    window.addEventListener("keyup", onArrowUp);
+    window.addEventListener("blur", clearWalk);
+    return () => {
+      clearWalk();
+      window.removeEventListener("keydown", onArrowDown);
+      window.removeEventListener("keyup", onArrowUp);
+      window.removeEventListener("blur", clearWalk);
+    };
+  }, [showJourney]);
+
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(id);
@@ -814,6 +858,17 @@ export function App() {
                 {muted ? "🔇 Muted" : "🔊 Sound"}
               </button>
               <div className="camera-pills" role="group" aria-label="Camera angle">
+                <button
+                  type="button"
+                  className={`hud-chip-btn ${autoCam ? "active" : ""}`}
+                  onClick={() => {
+                    setAutoCam((v) => !v);
+                    if (!autoCam) focusCamera("default");
+                  }}
+                  title="Automatically follow the coin, spinning coil, chute & prize in 3D"
+                >
+                  {autoCam ? "🎯 Auto-Cam" : "Auto-Cam Off"}
+                </button>
                 {(
                   [
                     { id: "default", label: "Front" },
@@ -846,9 +901,10 @@ export function App() {
 
         <div className="stage">
           <Canvas
+            frameloop={showJourney ? "never" : "always"}
             shadows
             dpr={[1, 1.75]}
-            camera={{ position: [0.06, 1.48, 2.86], fov: 50 }}
+            camera={{ position: [0.06, 1.46, 2.82], fov: 50 }}
             gl={{
               antialias: true,
               preserveDrawingBuffer: true,
@@ -861,12 +917,17 @@ export function App() {
           >
             <Gallery
               phase={phase}
+              playStep={playStep}
               sky={sky}
               topic={selectedTopic}
               rarity={product?.rarity ?? null}
               fullScreen={isFullScreenTakeover}
+              autoCam={autoCam}
               cameraView={cameraView}
               cameraViewSeq={cameraViewSeq}
+              vendingSlotIndex={vendingSlotIndex}
+              vendStarted={mark}
+              vendMs={VEND_MS}
               shockAt={shockAt}
             >
               <Machine
@@ -917,6 +978,7 @@ export function App() {
                 keyTapAt={keyTapAt}
                 nudgeWarn={nudgeWarn}
                 rarity={product?.rarity ?? null}
+                manualInputRef={walkKeysRef}
               />
               <WorldCopy
                 phase={phase}
@@ -941,6 +1003,61 @@ export function App() {
             product={product}
             onNudge={handleNudgeKids}
           />
+          {phase !== "reality" && !isFullScreenTakeover ? (
+            <>
+              <div className="stage-cam-hint">
+                🖱 Drag: Orbit · Right-Drag: Pan · Scroll: Zoom · ↑↓←→ Walk Family
+              </div>
+              <div className="dpad-overlay stage-walk-pad" aria-label="Walk family around floor">
+                <button
+                  type="button"
+                  className="dpad-btn up"
+                  onPointerDown={() => setWalkDirection("up", true)}
+                  onPointerUp={() => setWalkDirection("up", false)}
+                  onPointerLeave={() => setWalkDirection("up", false)}
+                  onPointerCancel={() => setWalkDirection("up", false)}
+                  title="Walk Closer (↑)"
+                >
+                  ▲
+                </button>
+                <div className="dpad-mid">
+                  <button
+                    type="button"
+                    className="dpad-btn"
+                    onPointerDown={() => setWalkDirection("left", true)}
+                    onPointerUp={() => setWalkDirection("left", false)}
+                    onPointerLeave={() => setWalkDirection("left", false)}
+                    onPointerCancel={() => setWalkDirection("left", false)}
+                    title="Walk Left (←)"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    type="button"
+                    className="dpad-btn"
+                    onPointerDown={() => setWalkDirection("down", true)}
+                    onPointerUp={() => setWalkDirection("down", false)}
+                    onPointerLeave={() => setWalkDirection("down", false)}
+                    onPointerCancel={() => setWalkDirection("down", false)}
+                    title="Walk Back (↓)"
+                  >
+                    ▼
+                  </button>
+                  <button
+                    type="button"
+                    className="dpad-btn"
+                    onPointerDown={() => setWalkDirection("right", true)}
+                    onPointerUp={() => setWalkDirection("right", false)}
+                    onPointerLeave={() => setWalkDirection("right", false)}
+                    onPointerCancel={() => setWalkDirection("right", false)}
+                    title="Walk Right (→)"
+                  >
+                    ▶
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
           {phase === "reality" && product?.payload.kind === "reality" ? (
             <RealityOverlay spec={product.payload} startedAt={mark} copied={copied} onCopy={() => void copyLink()} />
           ) : null}

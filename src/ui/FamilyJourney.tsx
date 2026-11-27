@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Journey3D } from "../scene/Journey3D";
 import {
   playCarLock,
   playElevatorDing,
@@ -355,118 +356,17 @@ export function FamilyJourney({ onComplete }: Props) {
                   {autoStep >= 3 && "Doors close, headlights beam on! The electric motor powers up as the car rolls out..."}
                 </p>
 
-                {/* Animated Home & Driveway Canvas */}
+                {/* Real-Time Three.js 3D Home & Driveway Scene */}
                 <div className="home-visual-canvas">
-                  <svg className="home-svg" viewBox="0 0 780 290">
-                    <defs>
-                      <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#050a18" />
-                        <stop offset="100%" stopColor="#0c162e" />
-                      </linearGradient>
-                      <linearGradient id="headlightBeam" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="rgba(0, 245, 255, 0.85)" />
-                        <stop offset="100%" stopColor="rgba(0, 245, 255, 0)" />
-                      </linearGradient>
-                      <filter id="glowLight">
-                        <feGaussianBlur stdDeviation="3" result="blur" />
-                        <feMerge>
-                          <feMergeNode in="blur" />
-                          <feMergeNode in="SourceGraphic" />
-                        </feMerge>
-                      </filter>
-                    </defs>
-
-                    <rect x="0" y="0" width="780" height="290" fill="url(#skyGrad)" />
-                    <circle cx="90" cy="40" r="1.5" fill="#ffffff" opacity="0.8" />
-                    <circle cx="210" cy="25" r="1.2" fill="#ffffff" opacity="0.6" />
-                    <circle cx="340" cy="50" r="1.5" fill="#ffffff" opacity="0.9" />
-                    <circle cx="500" cy="30" r="1.2" fill="#ffffff" opacity="0.7" />
-                    <circle cx="680" cy="45" r="1.8" fill="#ffffff" opacity="0.8" />
-                    <path d="M 700,30 A 14,14 0 0,0 688,16 A 12,12 0 1,1 700,30" fill="#fef08a" opacity="0.9" />
-
-                    <rect x="0" y="215" width="780" height="75" fill="#061a10" />
-                    <polygon points="380,290 460,215 780,215 780,290" fill="#1e2430" />
-
-                    <g className="house-building" transform="translate(60, 70)">
-                      <rect x="0" y="40" width="300" height="115" fill="#1b2438" stroke="#2d3b55" strokeWidth="2" />
-                      <polygon points="-20,40 150,-18 320,40" fill="#0f172a" stroke="#334155" strokeWidth="2" />
-                      <rect x="250" y="0" width="24" height="40" fill="#1e293b" />
-                      <rect x="35" y="55" width="50" height="38" rx="3" fill="#fde047" opacity="0.85" filter="url(#glowLight)" />
-                      <line x1="60" y1="55" x2="60" y2="93" stroke="#1b2438" strokeWidth="2" />
-                      <line x1="35" y1="74" x2="85" y2="74" stroke="#1b2438" strokeWidth="2" />
-                      <rect x="210" y="55" width="50" height="38" rx="3" fill="#fde047" opacity="0.85" filter="url(#glowLight)" />
-                      <line x1="235" y1="55" x2="235" y2="93" stroke="#1b2438" strokeWidth="2" />
-                      <line x1="210" y1="74" x2="260" y2="74" stroke="#1b2438" strokeWidth="2" />
-                      <rect x="125" y="90" width="55" height="65" fill="#fef08a" stroke="#3b82f6" strokeWidth="1.5" />
-                      <polygon points="125,90 180,90 220,155 85,155" fill="rgba(254, 240, 138, 0.35)" />
-                      <circle cx="115" cy="98" r="5" fill="#fde047" filter="url(#glowLight)" />
-                      <line x1="115" y1="92" x2="115" y2="98" stroke="#64748b" strokeWidth="2" />
-                    </g>
-
-                    <path d="M 210,225 Q 300,230 400,245 T 510,250" fill="none" stroke="#334155" strokeWidth="14" strokeDasharray="20 10" />
-
-                    <g
-                      className="driveway-car"
-                      transform={autoStep >= 3 ? "translate(580, 180)" : "translate(510, 180)"}
-                      style={{ transition: "transform 1.1s cubic-bezier(0.4, 0, 0.2, 1)" }}
-                    >
-                      {autoStep >= 2 && (
-                        <polygon points="175,45 175,55 390,80 390,20" fill="url(#headlightBeam)" />
-                      )}
-                      <path
-                        d="M 10,50 L 30,30 Q 60,18 120,18 Q 160,20 180,42 L 195,50 Q 200,55 195,64 L 15,64 Q 10,58 10,50 Z"
-                        fill="#0f172a"
-                        stroke="#00f5ff"
-                        strokeWidth="2.5"
-                      />
-                      <path d="M 40,30 L 65,22 L 115,22 L 115,44 L 35,44 Z" fill="#38bdf8" opacity="0.6" />
-                      <path d="M 122,22 L 158,26 L 172,44 L 122,44 Z" fill="#38bdf8" opacity="0.6" />
-                      <circle cx="50" cy="64" r="14" fill="#020617" stroke="#475569" strokeWidth="4" />
-                      <circle cx="155" cy="64" r="14" fill="#020617" stroke="#475569" strokeWidth="4" />
-                      <circle cx="50" cy="64" r="5" fill="#00f5ff" />
-                      <circle cx="155" cy="64" r="5" fill="#00f5ff" />
-                      <circle
-                        cx="192"
-                        cy="48"
-                        r="5"
-                        fill={autoStep >= 2 ? "#00f5ff" : "#64748b"}
-                        filter={autoStep >= 2 ? "url(#glowLight)" : undefined}
-                      />
-                      {autoStep >= 2 && (
-                        <g opacity="0.95">
-                          <circle cx="75" cy="30" r="5" fill="#facc15" />
-                          <circle cx="135" cy="31" r="4.2" fill="#ff85a1" />
-                          <circle cx="150" cy="32" r="3.8" fill="#38bdf8" />
-                        </g>
-                      )}
-                    </g>
-
-                    {autoStep === 1 && (
-                      <g className="walking-family-group">
-                        <g transform="translate(340, 195)" className="animated-walking-actor">
-                          <circle cx="0" cy="-22" r="6.5" fill="#e2b186" />
-                          <rect x="-4" y="-16" width="8" height="18" rx="2" fill="#1e293b" />
-                          <line x1="-3" y1="2" x2="-6" y2="16" stroke="#0f172a" strokeWidth="3" className="animated-leg-left" />
-                          <line x1="3" y1="2" x2="6" y2="16" stroke="#0f172a" strokeWidth="3" className="animated-leg-right" />
-                        </g>
-                        <g transform="translate(368, 201)" className="animated-walking-actor">
-                          <circle cx="0" cy="-16" r="5.5" fill="#e2b186" />
-                          <circle cx="-5" cy="-17" r="2.5" fill="#713f12" />
-                          <rect x="-4" y="-11" width="8" height="15" rx="2" fill="#ff85a1" />
-                          <circle cx="6" cy="-2" r="3" fill="#ffd700" filter="url(#glowLight)" />
-                          <line x1="-2" y1="3" x2="-4" y2="14" stroke="#0f172a" strokeWidth="2.5" className="animated-leg-left" />
-                          <line x1="2" y1="3" x2="5" y2="14" stroke="#0f172a" strokeWidth="2.5" className="animated-leg-right" />
-                        </g>
-                        <g transform="translate(395, 198)" className="animated-walking-actor">
-                          <circle cx="0" cy="-14" r="5" fill="#e2b186" />
-                          <rect x="-4" y="-17" width="8" height="3" fill="#38bdf8" />
-                          <rect x="-3" y="-9.5" width="6" height="12" rx="2" fill="#38bdf8" />
-                          <line x1="-2" y1="2.5" x2="-5" y2="13" stroke="#0f172a" strokeWidth="2.5" className="animated-leg-left" />
-                          <line x1="2" y1="2.5" x2="5" y2="13" stroke="#0f172a" strokeWidth="2.5" className="animated-leg-right" />
-                        </g>
-                      </g>
-                    )}
-                  </svg>
+                  <Journey3D
+                    stage={stage}
+                    autoStep={autoStep}
+                    carProgress={carProgress}
+                    walkPhase={walkPhase}
+                    cabinY={cabinY}
+                    doorsOpen={doorsOpen}
+                    familyX={familyX}
+                  />
                 </div>
 
                 <div className="journey-dialogue-card mini">
@@ -494,49 +394,15 @@ export function FamilyJourney({ onComplete }: Props) {
                 <h2>Cruising on the Highway to Starlight Mall</h2>
 
                 <div className="road-scenic-canvas">
-                  <svg className="road-svg" viewBox="0 0 780 145">
-                    <defs>
-                      <linearGradient id="mallGlow" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#bf5af2" />
-                        <stop offset="100%" stopColor="#00f5ff" />
-                      </linearGradient>
-                    </defs>
-
-                    <rect x="0" y="0" width="780" height="145" fill="#040816" />
-                    <polygon points="40,90 40,55 70,55 70,90" fill="#0c162e" />
-                    <polygon points="90,90 90,40 130,40 130,90" fill="#0f1c3a" />
-                    <polygon points="160,90 160,45 190,45 190,90" fill="#0c162e" />
-                    <polygon points="210,90 210,30 250,30 250,90" fill="#142347" />
-
-                    <g className="distant-mall" transform="translate(600, 38)">
-                      <ellipse cx="70" cy="48" rx="65" ry="40" fill="rgba(191, 90, 242, 0.25)" />
-                      <ellipse cx="70" cy="48" rx="50" ry="30" fill="#120826" stroke="url(#mallGlow)" strokeWidth="3" />
-                      <line x1="70" y1="18" x2="70" y2="2" stroke="#00f5ff" strokeWidth="2.5" />
-                      <circle cx="70" cy="2" r="3.5" fill="#00f5ff" />
-                      <text x="70" y="52" textAnchor="middle" fill="#ffffff" fontSize="10" fontWeight="bold" fontFamily="var(--mono)">
-                        STARLIGHT MALL
-                      </text>
-                    </g>
-
-                    <rect x="0" y="90" width="780" height="55" fill="#111827" />
-                    <line x1="0" y1="118" x2="780" y2="118" stroke="#facc15" strokeWidth="3" strokeDasharray="24 16" className="animated-road-stripes" />
-
-                    <g className="driving-car-actor" transform="translate(220, 80)">
-                      <polygon points="135,28 135,36 340,52 340,12" fill="url(#headlightBeam)" opacity="0.7" />
-                      <path
-                        d="M 10,34 L 28,18 Q 55,10 100,10 Q 130,12 145,28 L 158,34 Q 162,38 158,45 L 12,45 Z"
-                        fill="#0a101f"
-                        stroke="#00f5ff"
-                        strokeWidth="2"
-                      />
-                      <circle cx="40" cy="45" r="9" fill="#020617" stroke="#475569" strokeWidth="3" />
-                      <circle cx="125" cy="45" r="9" fill="#020617" stroke="#475569" strokeWidth="3" />
-                      <circle cx="40" cy="45" r="3" fill="#00f5ff" />
-                      <circle cx="125" cy="45" r="3" fill="#00f5ff" />
-                      <circle cx="65" cy="20" r="4" fill="#facc15" />
-                      <circle cx="105" cy="20" r="3.2" fill="#ff85a1" />
-                    </g>
-                  </svg>
+                  <Journey3D
+                    stage={stage}
+                    autoStep={autoStep}
+                    carProgress={carProgress}
+                    walkPhase={walkPhase}
+                    cabinY={cabinY}
+                    doorsOpen={doorsOpen}
+                    familyX={familyX}
+                  />
                 </div>
 
                 <div className="car-dashboard">
@@ -669,72 +535,15 @@ export function FamilyJourney({ onComplete }: Props) {
             </p>
 
             <div className="parking-visual-canvas">
-              <svg className="parking-svg" viewBox="0 0 780 250">
-                <defs>
-                  <linearGradient id="garageFloor" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#111827" />
-                    <stop offset="100%" stopColor="#080c14" />
-                  </linearGradient>
-                  <linearGradient id="mallDoorGlow" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="rgba(254, 240, 138, 0.4)" />
-                    <stop offset="100%" stopColor="rgba(56, 189, 248, 0.5)" />
-                  </linearGradient>
-                </defs>
-
-                <rect x="0" y="0" width="780" height="70" fill="#0f172a" />
-                <rect x="0" y="65" width="780" height="10" fill="#1e293b" />
-                <line x1="0" y1="35" x2="780" y2="35" stroke="#f59e0b" strokeWidth="3" strokeDasharray="30 20" />
-                <rect x="0" y="75" width="780" height="175" fill="url(#garageFloor)" />
-
-                {/* BAY P2-22 */}
-                <g transform="translate(40, 75)">
-                  <rect x="0" y="0" width="160" height="170" fill="rgba(255,255,255,0.02)" stroke="#334155" strokeWidth="2" strokeDasharray="6 6" />
-                  <circle cx="80" cy="15" r="5" fill="#ef4444" />
-                  <text x="80" y="32" textAnchor="middle" fill="#94a3b8" fontSize="11" fontFamily="var(--mono)">P2-22 [OCCUPIED]</text>
-                  <rect x="25" y="45" width="110" height="110" rx="8" fill="#1e293b" stroke="#475569" strokeWidth="2" />
-                  <rect x="40" y="65" width="80" height="45" rx="4" fill="#0f172a" />
-                </g>
-
-                {/* BAY P2-23 (TARGET) */}
-                <g transform="translate(240, 75)">
-                  <rect x="0" y="0" width="220" height="170" fill="rgba(0, 255, 136, 0.08)" stroke="#00ff88" strokeWidth="3" rx="6" />
-                  <circle cx="110" cy="15" r="7" fill="#00ff88" filter="url(#glowLight)" />
-                  <text x="110" y="34" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="13" fontFamily="var(--mono)">
-                    ★ BAY P2-23 [PARK HERE] ★
-                  </text>
-                  <g transform="translate(25, 45)">
-                    <rect x="0" y="0" width="170" height="110" rx="10" fill="#030712" stroke="#00f5ff" strokeWidth="2.5" />
-                    <rect x="25" y="20" width="120" height="55" rx="6" fill="#0f172a" stroke="#38bdf8" strokeWidth="1.5" />
-                    <circle cx="35" cy="100" r="10" fill="#000" stroke="#00f5ff" strokeWidth="2" />
-                    <circle cx="135" cy="100" r="10" fill="#000" stroke="#00f5ff" strokeWidth="2" />
-                    <text x="85" y="55" textAnchor="middle" fill="#00f5ff" fontSize="10" fontFamily="var(--mono)">FAMILY EV CAR</text>
-                  </g>
-                </g>
-
-                {/* BAY P2-24 */}
-                <g transform="translate(500, 75)">
-                  <rect x="0" y="0" width="110" height="170" fill="rgba(255,255,255,0.02)" stroke="#334155" strokeWidth="2" strokeDasharray="6 6" />
-                  <circle cx="55" cy="15" r="5" fill="#ef4444" />
-                  <text x="55" y="32" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="var(--mono)">P2-24 [OCCUPIED]</text>
-                  <rect x="15" y="50" width="80" height="105" rx="6" fill="#1e293b" />
-                </g>
-
-                {/* DIRECT ENTRANCE TO MALL ATRIUM */}
-                <g transform="translate(635, 50)">
-                  <rect x="0" y="0" width="135" height="190" fill="url(#mallDoorGlow)" rx="8" stroke="#38bdf8" strokeWidth="2" />
-                  <rect x="8" y="10" width="119" height="24" rx="4" fill="#0f172a" />
-                  <text x="67" y="26" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="9" fontFamily="var(--mono)">
-                    ◄ MALL ENTRANCE
-                  </text>
-                  <text x="67" y="100" textAnchor="middle" fill="#ffffff" fontSize="28">🏬</text>
-                  <text x="67" y="140" textAnchor="middle" fill="#00f5ff" fontWeight="bold" fontSize="9" fontFamily="var(--mono)">
-                    GLASS LIFT LOBBY
-                  </text>
-                  <text x="67" y="160" textAnchor="middle" fill="#fde047" fontSize="8" fontFamily="var(--mono)">
-                    ➔ LEVEL 2 ARCADE
-                  </text>
-                </g>
-              </svg>
+              <Journey3D
+                stage={stage}
+                autoStep={autoStep}
+                carProgress={carProgress}
+                walkPhase={walkPhase}
+                cabinY={cabinY}
+                doorsOpen={doorsOpen}
+                familyX={familyX}
+              />
             </div>
 
             <div className="parking-hud">
@@ -847,285 +656,15 @@ export function FamilyJourney({ onComplete }: Props) {
                 Lift Tower, Cabin physically moving, and people walking!)
                 ======================================================== */}
             <div className="mall-grand-atrium-canvas">
-              <svg className="mall-grand-svg" viewBox="0 0 840 440">
-                <defs>
-                  {/* Sky & Lighting Gradients */}
-                  <linearGradient id="mallVaultGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#040816" />
-                    <stop offset="40%" stopColor="#0a1532" />
-                    <stop offset="100%" stopColor="#111c38" />
-                  </linearGradient>
-                  <linearGradient id="shaftGlassGrad" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="rgba(0, 245, 255, 0.45)" />
-                    <stop offset="50%" stopColor="rgba(0, 245, 255, 0.08)" />
-                    <stop offset="100%" stopColor="rgba(0, 245, 255, 0.45)" />
-                  </linearGradient>
-                  <linearGradient id="cabinGlass" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="rgba(56, 189, 248, 0.35)" />
-                    <stop offset="100%" stopColor="rgba(0, 245, 255, 0.12)" />
-                  </linearGradient>
-                  <linearGradient id="marbleTile" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#15213b" />
-                    <stop offset="100%" stopColor="#0a0f1d" />
-                  </linearGradient>
-                  <linearGradient id="machineNeon" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#ff4b72" />
-                    <stop offset="50%" stopColor="#bf5af2" />
-                    <stop offset="100%" stopColor="#00f5ff" />
-                  </linearGradient>
-                </defs>
-
-                {/* 1. Atrium Vaulted Background */}
-                <rect x="0" y="0" width="840" height="440" fill="url(#mallVaultGrad)" />
-                {/* Skylight Steel Arches */}
-                <path d="M 0,0 Q 420,80 840,0" fill="none" stroke="rgba(0, 245, 255, 0.3)" strokeWidth="3" />
-                <circle cx="210" cy="55" r="5" fill="#fde047" filter="url(#glowLight)" />
-                <circle cx="630" cy="55" r="5" fill="#38bdf8" filter="url(#glowLight)" />
-
-                {/* 2. LEVEL 1 (MID FLOOR): MEZZANINE SHOPS (Left Side) */}
-                <g transform="translate(0, 250)">
-                  <rect x="0" y="0" width="345" height="15" fill="#1e293b" stroke="#334155" strokeWidth="1" />
-                  <rect x="0" y="-18" width="345" height="18" fill="rgba(56, 189, 248, 0.15)" stroke="#64748b" strokeWidth="1" />
-                  <g transform="translate(15, -45)">
-                    <rect x="0" y="0" width="95" height="24" rx="3" fill="#0f172a" stroke="#38bdf8" strokeWidth="1" />
-                    <text x="47" y="16" textAnchor="middle" fill="#38bdf8" fontSize="9" fontFamily="var(--mono)">👗 FASHION</text>
-                    <rect x="110" y="0" width="95" height="24" rx="3" fill="#0f172a" stroke="#f472b6" strokeWidth="1" />
-                    <text x="157" y="16" textAnchor="middle" fill="#f472b6" fontSize="9" fontFamily="var(--mono)">🍰 BAKERY</text>
-                    <rect x="220" y="0" width="95" height="24" rx="3" fill="#0f172a" stroke="#facc15" strokeWidth="1" />
-                    <text x="267" y="16" textAnchor="middle" fill="#facc15" fontSize="9" fontFamily="var(--mono)">☕ CAFE</text>
-                  </g>
-                </g>
-
-                {/* 3. LEVEL 2 (TOP FLOOR): THE PLAY AREA & ARCADE (Right Side) */}
-                <g transform="translate(545, 130)">
-                  <rect x="0" y="0" width="295" height="16" fill="#1e293b" stroke="#334155" strokeWidth="1" />
-                  <rect x="0" y="-18" width="295" height="18" fill="rgba(244, 63, 94, 0.2)" stroke="#f43f5e" strokeWidth="1" />
-                  {/* Neon Signboard for Play Area */}
-                  <rect x="10" y="-115" width="275" height="26" rx="5" fill="#2e1065" stroke="url(#machineNeon)" strokeWidth="2" />
-                  <text x="147" y="-98" textAnchor="middle" fill="#ffffff" fontWeight="bold" fontSize="10.5" fontFamily="var(--mono)">
-                    ★ LEVEL 2: STARLIGHT PLAY AREA ★
-                  </text>
-                  {/* Bunting & Arcade Games */}
-                  <path d="M 10,-80 Q 75,-65 140,-80 Q 205,-65 270,-80" fill="none" stroke="#f59e0b" strokeWidth="2" strokeDasharray="8 6" />
-                  <circle cx="45" cy="-70" r="4" fill="#fde047" />
-                  <circle cx="110" cy="-70" r="4" fill="#ff4b72" />
-                  <circle cx="180" cy="-70" r="4" fill="#00f5ff" />
-
-                  {/* Pinball Machine on Level 2 */}
-                  <g transform="translate(15, -75)" opacity="0.85">
-                    <rect x="0" y="0" width="45" height="75" rx="3" fill="#1e1b4b" stroke="#4338ca" strokeWidth="1.5" />
-                    <rect x="5" y="8" width="35" height="26" fill="#064e3b" />
-                    <text x="22" y="25" textAnchor="middle" fill="#34d399" fontSize="7" fontFamily="var(--mono)">PINBALL</text>
-                  </g>
-
-                  {/* Racing Rig on Level 2 */}
-                  <g transform="translate(70, -75)" opacity="0.85">
-                    <rect x="0" y="0" width="45" height="75" rx="3" fill="#1e1b4b" stroke="#ec4899" strokeWidth="1.5" />
-                    <rect x="5" y="8" width="35" height="26" fill="#831843" />
-                    <text x="22" y="25" textAnchor="middle" fill="#f472b6" fontSize="7" fontFamily="var(--mono)">RACING</text>
-                  </g>
-
-                  {/* ========================================================
-                      HERO PIECE: THE 3D IMPOSSIBLE VENDING MACHINE!
-                      Standing at x = 135 to 265 on Level 2
-                      ======================================================== */}
-                  <g transform="translate(135, -125)">
-                    {/* Machine Outer Shell */}
-                    <rect x="0" y="0" width="130" height="125" rx="10" fill="#080e1c" stroke="url(#machineNeon)" strokeWidth="3" filter="url(#glowLight)" />
-                    {/* Header Marquee */}
-                    <rect x="8" y="8" width="114" height="18" rx="4" fill="#1e1b4b" stroke="#00f5ff" strokeWidth="1" />
-                    <text x="65" y="21" textAnchor="middle" fill="#00f5ff" fontSize="7.5" fontWeight="bold" fontFamily="var(--mono)">
-                      IMPOSSIBLE VENDING
-                    </text>
-                    {/* Glass Window with Coils & Gifts */}
-                    <rect x="10" y="30" width="110" height="60" rx="5" fill="rgba(6, 182, 212, 0.22)" stroke="#00f5ff" strokeWidth="1.5" />
-                    {/* Coils & Colorful Gift Spheres */}
-                    <line x1="16" y1="46" x2="114" y2="46" stroke="#f43f5e" strokeWidth="2.5" strokeDasharray="6 4" />
-                    <circle cx="32" cy="46" r="6" fill="#facc15" filter="url(#glowLight)" />
-                    <circle cx="58" cy="46" r="6" fill="#ff4b72" filter="url(#glowLight)" />
-                    <circle cx="84" cy="46" r="6" fill="#00f5ff" filter="url(#glowLight)" />
-                    <line x1="16" y1="68" x2="114" y2="68" stroke="#a855f7" strokeWidth="2.5" strokeDasharray="6 4" />
-                    <circle cx="32" cy="68" r="6" fill="#38bdf8" />
-                    <circle cx="58" cy="68" r="6" fill="#4ade80" />
-                    <circle cx="84" cy="68" r="6" fill="#fb923c" />
-
-                    {/* Coin Slot with Pulsing Glow Pointer */}
-                    <g transform="translate(78, 94)">
-                      <rect x="0" y="0" width="40" height="18" rx="3" fill="#0f172a" stroke="#f59e0b" strokeWidth="1.5" className="animated-coin-slot" />
-                      <circle cx="10" cy="9" r="3.5" fill="#f59e0b" />
-                      <text x="26" y="12" textAnchor="middle" fill="#f59e0b" fontWeight="bold" fontSize="6.5" fontFamily="var(--mono)">COIN</text>
-                    </g>
-                    {/* Prize Chute */}
-                    <rect x="14" y="93" width="56" height="24" rx="4" fill="#020617" stroke="#334155" strokeWidth="1.5" />
-                    <text x="42" y="108" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="6.5" fontFamily="var(--mono)">PRIZE CHUTE</text>
-                  </g>
-                </g>
-
-                {/* 4. GROUND FLOOR LOBBY (P2) POLISHED REFLECTIVE MARBLE */}
-                <polygon points="0,440 0,370 840,370 840,440" fill="url(#marbleTile)" />
-                <line x1="0" y1="400" x2="840" y2="400" stroke="rgba(255, 255, 255, 0.08)" strokeWidth="1" />
-
-                {/* Left Side: Automatic Sliding Glass Doors from Parking */}
-                <g transform="translate(20, 305)">
-                  <rect x="0" y="0" width="12" height="75" fill="#334155" />
-                  <rect x="90" y="0" width="12" height="75" fill="#334155" />
-                  <rect x="12" y="4" width="22" height="67" fill="rgba(56, 189, 248, 0.25)" stroke="#38bdf8" strokeWidth="1.5" />
-                  <rect x="68" y="4" width="22" height="67" fill="rgba(56, 189, 248, 0.25)" stroke="#38bdf8" strokeWidth="1.5" />
-                  <rect x="-8" y="-14" width="120" height="14" rx="2" fill="#0f172a" stroke="#00f5ff" strokeWidth="1" />
-                  <text x="52" y="-3" textAnchor="middle" fill="#00f5ff" fontSize="7" fontFamily="var(--mono)">
-                    ◄ FROM PARKING P2-23
-                  </text>
-                </g>
-
-                {/* ========================================================
-                    5. THE CENTRAL GLASS ELEVATOR TOWER (x = 350 to 540)
-                    A Realistic, Magnificent Glass Lift Shaft & Moving Cabin!
-                    ======================================================== */}
-                <g transform="translate(350, 20)">
-                  {/* Vertical Steel & Glass Shaft Columns */}
-                  <rect x="0" y="10" width="190" height="350" fill="url(#shaftGlassGrad)" stroke="#00f5ff" strokeWidth="2.5" />
-                  <line x1="25" y1="10" x2="25" y2="360" stroke="#00f5ff" strokeWidth="1" strokeDasharray="6 6" />
-                  <line x1="165" y1="10" x2="165" y2="360" stroke="#00f5ff" strokeWidth="1" strokeDasharray="6 6" />
-
-                  {/* Top Machine House & Hoist Cables */}
-                  <rect x="-5" y="-5" width="200" height="18" rx="4" fill="#020617" stroke="#00ff88" strokeWidth="2" />
-                  <text x="95" y="8" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="8.5" fontFamily="var(--mono)">
-                    🛗 CENTRAL GLASS LIFT
-                  </text>
-                  {/* Steel Hoist Cables connected to cabin */}
-                  <line x1="75" y1="10" x2="75" y2={cabinY} stroke="#94a3b8" strokeWidth="2" />
-                  <line x1="115" y1="10" x2="115" y2={cabinY} stroke="#94a3b8" strokeWidth="2" />
-
-                  {/* Shaft Floor Landing Markers */}
-                  <g transform="translate(165, 45)">
-                    <rect x="5" y="0" width="18" height="14" rx="2" fill={currentFloor === "L2" ? "#00ff88" : "#334155"} />
-                    <text x="14" y="10" textAnchor="middle" fill={currentFloor === "L2" ? "#000" : "#fff"} fontWeight="bold" fontSize="8">L2</text>
-                  </g>
-                  <g transform="translate(165, 165)">
-                    <rect x="5" y="0" width="18" height="14" rx="2" fill={currentFloor === "L1" ? "#00ff88" : "#334155"} />
-                    <text x="14" y="10" textAnchor="middle" fill={currentFloor === "L1" ? "#000" : "#fff"} fontWeight="bold" fontSize="8">L1</text>
-                  </g>
-                  <g transform="translate(165, 285)">
-                    <rect x="5" y="0" width="18" height="14" rx="2" fill={currentFloor === "P2" ? "#00ff88" : "#334155"} />
-                    <text x="14" y="10" textAnchor="middle" fill={currentFloor === "P2" ? "#000" : "#fff"} fontWeight="bold" fontSize="8">P2</text>
-                  </g>
-
-                  {/* ====================================================
-                      THE MOVING GLASS ELEVATOR CABIN (Y = cabinY)
-                      Physically moves from 285 up to 45!
-                      ==================================================== */}
-                  <g
-                    transform={`translate(20, ${cabinY})`}
-                    style={{ transition: "transform 0.1s linear" }}
-                  >
-                    {/* Cabin Steel Outer Frame */}
-                    <rect x="0" y="0" width="150" height="95" rx="8" fill="#070d1a" stroke="#00ff88" strokeWidth="3" filter="url(#glowLight)" />
-                    {/* Panoramic Curved Glass Panel */}
-                    <rect x="6" y="8" width="138" height="78" rx="6" fill="url(#cabinGlass)" stroke="#38bdf8" strokeWidth="1.5" />
-
-                    {/* Digital LED Floor Display Inside Cabin */}
-                    <rect x="35" y="14" width="80" height="18" rx="4" fill="#020617" stroke="#00ff88" strokeWidth="1" />
-                    <text x="75" y="27" textAnchor="middle" fill="#00ff88" fontWeight="bold" fontSize="9" fontFamily="var(--mono)">
-                      FLOOR: {currentFloor}
-                    </text>
-
-                    {/* DUAL SLIDING ELEVATOR DOORS */}
-                    <g className="svg-cabin-doors">
-                      {/* Left Door Panel */}
-                      <rect
-                        x="10"
-                        y="10"
-                        width="64"
-                        height="76"
-                        fill="rgba(15, 23, 42, 0.9)"
-                        stroke="#00f5ff"
-                        strokeWidth="1.5"
-                        style={{
-                          transform: doorsOpen ? "translateX(-60px)" : "none",
-                          transition: "transform 0.65s cubic-bezier(0.16, 1, 0.3, 1)",
-                        }}
-                      />
-                      {/* Right Door Panel */}
-                      <rect
-                        x="76"
-                        y="10"
-                        width="64"
-                        height="76"
-                        fill="rgba(15, 23, 42, 0.9)"
-                        stroke="#00f5ff"
-                        strokeWidth="1.5"
-                        style={{
-                          transform: doorsOpen ? "translateX(60px)" : "none",
-                          transition: "transform 0.65s cubic-bezier(0.16, 1, 0.3, 1)",
-                        }}
-                      />
-                    </g>
-                  </g>
-                </g>
-
-                {/* ========================================================
-                    6. THE ANIMATED FAMILY (DAD, MAYA, LEO)
-                    Walking across the floor, entering the lift, ascending,
-                    exiting the lift, and moving to the Play Area!
-                    ======================================================== */}
-                {(() => {
-                  // Y coordinate for family:
-                  // If on ground floor (walkPhase 0 or 1): Y = 380
-                  // If inside cabin (walkPhase 2 or 3): Y moves with cabinY + 80!
-                  // If on Level 2 (walkPhase 4, 5, 6): Y = 140!
-                  const famY =
-                    walkPhase <= 1
-                      ? 380
-                      : walkPhase === 2 || walkPhase === 3
-                        ? 20 + cabinY + 76
-                        : 140;
-
-                  const isWalking = walkPhase === 0 || walkPhase === 1 || walkPhase === 4 || walkPhase === 5;
-
-                  return (
-                    <g transform={`translate(${familyX}, ${famY})`}>
-                      {/* Floor shadow */}
-                      <ellipse cx="25" cy="0" rx="35" ry="4" fill="rgba(0, 245, 255, 0.2)" />
-
-                      {/* Dad */}
-                      <g transform="translate(0, -26)" className={isWalking ? "animated-walking-actor" : undefined}>
-                        <circle cx="0" cy="0" r="7.5" fill="#e2b186" />
-                        <rect x="-5" y="8" width="10" height="22" rx="2" fill="#1e293b" />
-                        <line x1="-3" y1="30" x2="-6" y2="48" stroke="#0f172a" strokeWidth="3" className={isWalking ? "animated-leg-left" : undefined} />
-                        <line x1="3" y1="30" x2="6" y2="48" stroke="#0f172a" strokeWidth="3" className={isWalking ? "animated-leg-right" : undefined} />
-                      </g>
-
-                      {/* Maya (carrying shiny lucky coin) */}
-                      <g transform="translate(30, -22)" className={isWalking ? "animated-walking-actor" : undefined}>
-                        <circle cx="0" cy="0" r="6.5" fill="#e2b186" />
-                        <circle cx="-5" cy="-2" r="2.5" fill="#713f12" />
-                        <rect x="-4" y="7" width="8" height="17" rx="2" fill="#ff85a1" />
-                        {/* Golden coin held high! */}
-                        <line x1="4" y1="11" x2="16" y2="-6" stroke="#ff85a1" strokeWidth="2.5" />
-                        <circle cx="18" cy="-8" r="5.5" fill="#ffd700" stroke="#f59e0b" strokeWidth="1.5" className="animated-lucky-coin" />
-                        <line x1="-2" y1="24" x2="-5" y2="42" stroke="#0f172a" strokeWidth="2.5" className={isWalking ? "animated-leg-left" : undefined} />
-                        <line x1="2" y1="24" x2="5" y2="42" stroke="#0f172a" strokeWidth="2.5" className={isWalking ? "animated-leg-right" : undefined} />
-                      </g>
-
-                      {/* Leo (wearing cap, jumping when arrived) */}
-                      <g transform="translate(56, -20)" className={walkPhase >= 5 ? "animated-jump" : isWalking ? "animated-walking-actor" : undefined}>
-                        <circle cx="0" cy="0" r="6" fill="#e2b186" />
-                        <rect x="-4" y="-3" width="8" height="3" fill="#38bdf8" />
-                        <rect x="-3" y="6" width="6" height="15" rx="2" fill="#38bdf8" />
-                        {/* Arms in air when arrived at machine */}
-                        {walkPhase >= 5 ? (
-                          <>
-                            <line x1="-3" y1="9" x2="-10" y2="-4" stroke="#38bdf8" strokeWidth="2.5" />
-                            <line x1="3" y1="9" x2="10" y2="-4" stroke="#38bdf8" strokeWidth="2.5" />
-                          </>
-                        ) : null}
-                        <line x1="-2" y1="21" x2="-4" y2="38" stroke="#0f172a" strokeWidth="2.5" className={isWalking ? "animated-leg-left" : undefined} />
-                        <line x1="2" y1="21" x2="4" y2="38" stroke="#0f172a" strokeWidth="2.5" className={isWalking ? "animated-leg-right" : undefined} />
-                      </g>
-                    </g>
-                  );
-                })()}
-              </svg>
+              <Journey3D
+                stage={stage}
+                autoStep={autoStep}
+                carProgress={carProgress}
+                walkPhase={walkPhase}
+                cabinY={cabinY}
+                doorsOpen={doorsOpen}
+                familyX={familyX}
+              />
             </div>
 
             {/* Live Story Dialogue Card */}

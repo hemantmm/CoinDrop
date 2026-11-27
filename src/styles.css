@@ -951,11 +951,17 @@ h1 {
 }
 
 .journey-content {
-  padding: 24px 28px;
+  padding: 20px 26px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
+}
+
+.journey-content > * {
+  flex-shrink: 0;
 }
 .scene-badge {
   display: inline-flex;
@@ -2175,6 +2181,176 @@ h1 {
 .coin-return-pill:hover {
   background: rgba(185, 28, 28, 0.5);
   border-color: #f87171;
+}
+
+.home-visual-canvas,
+.road-scenic-canvas,
+.parking-visual-canvas,
+.mall-entrance-canvas,
+.lift-scenic-canvas,
+.playarea-visual-canvas,
+.mall-grand-atrium-canvas {
+  flex: 0 0 auto;
+  min-height: 220px;
+}
+
+.road-scenic-canvas {
+  min-height: 170px;
+}
+
+.mall-grand-atrium-canvas {
+  min-height: 280px;
+}
+
+.journey-3d-viewport {
+  width: 100%;
+  height: clamp(240px, 34vh, 300px);
+  min-height: 230px;
+  background: #060d1f;
+  position: relative;
+  overflow: hidden;
+}
+
+.road-scenic-canvas .journey-3d-viewport {
+  height: clamp(170px, 23vh, 210px);
+  min-height: 170px;
+}
+
+.mall-grand-atrium-canvas .journey-3d-viewport {
+  height: clamp(280px, 40vh, 360px);
+  min-height: 270px;
+}
+
+.journey-3d-viewport canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.journey-3d-hud-top {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.journey-3d-hint,
+.stage-cam-hint {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(6, 12, 26, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: rgba(226, 232, 240, 0.92);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.stage-cam-hint {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  z-index: 4;
+}
+
+.journey-reset-cam {
+  pointer-events: auto;
+  appearance: none;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: rgba(8, 22, 46, 0.84);
+  color: #e0f2fe;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: border-color 140ms, background 140ms, transform 140ms;
+}
+
+.journey-reset-cam:hover {
+  border-color: #38bdf8;
+  background: rgba(14, 116, 144, 0.42);
+  transform: translateY(-1px);
+}
+
+.dpad-overlay {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+  touch-action: none;
+}
+
+.stage-walk-pad {
+  right: 16px;
+  bottom: 16px;
+  z-index: 4;
+}
+
+.dpad-mid {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dpad-btn {
+  appearance: none;
+  width: 34px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  background: rgba(8, 15, 32, 0.78);
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: transform 90ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.dpad-btn:hover {
+  border-color: rgba(56, 189, 248, 0.75);
+  background: rgba(15, 33, 66, 0.88);
+  color: #ffffff;
+}
+
+.dpad-btn:active {
+  transform: scale(0.92);
+  border-color: #00f5ff;
+  background: rgba(6, 182, 212, 0.35);
+}
+
+@media (max-width: 720px) {
+  .stage-cam-hint {
+    display: none;
+  }
+  .journey-3d-hint {
+    font-size: 9px;
+    padding: 4px 8px;
+  }
+  .dpad-btn {
+    width: 30px;
+    height: 28px;
+  }
 }
 
 

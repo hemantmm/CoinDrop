@@ -6,6 +6,13 @@ import type { Rarity } from "../generate";
 import type { CoinPlayer, GiftTopic, PlayStep } from "../stock";
 import { SHELF_SPOTS, type Phase } from "./Machine";
 
+export type WalkKeys = {
+  up: boolean;
+  down: boolean;
+  left: boolean;
+  right: boolean;
+};
+
 type Role = "queue" | "watch";
 type Expression = "calm" | "cheer" | "gasp";
 
@@ -168,6 +175,25 @@ function lerpAngle(current: number, target: number, alpha: number) {
   while (diff < -Math.PI) diff += Math.PI * 2;
   while (diff > Math.PI) diff -= Math.PI * 2;
   return current + diff * alpha;
+}
+
+function clampFloorClearOfPlinth(rawX: number, rawZ: number, target: THREE.Vector3) {
+  let x = THREE.MathUtils.clamp(rawX, -1.65, 1.65);
+  let z = THREE.MathUtils.clamp(rawZ, 0.55, 1.95);
+  if (x > -0.47 && x < 0.49 && z > 0.66 && z < 1.26) {
+    const dLeft = Math.abs(x - -0.47);
+    const dRight = Math.abs(0.49 - x);
+    const dFront = Math.abs(1.26 - z);
+    const dBack = Math.abs(z - 0.66);
+    const minHoriz = Math.min(dLeft, dRight);
+    const minVert = Math.min(dFront, dBack);
+    if (minVert <= minHoriz) {
+      z = dBack < dFront ? 0.65 : 1.27;
+    } else {
+      x = dLeft < dRight ? -0.48 : 0.5;
+    }
+  }
+  target.set(x, 0, z);
 }
 
 // Routes around the showcase plinth [x:-0.45..0.52, z:0.66..1.28] & glass aisle cleanly without clipping!
@@ -479,11 +505,16 @@ function Body({
         </group>
       </group>
 
-      {/* Articulated Torso + Shoulders + Elbows + Head */}
+      {/* Articulated Torso + Collar + Shoulders + Elbows + Head */}
       <group ref={torso} position={[0, 0.78, 0]}>
         <mesh position={[0, 0.26, 0]} castShadow>
           <capsuleGeometry args={[0.175, 0.34, 4, 8]} />
           <meshStandardMaterial color={coat} roughness={0.72} />
+        </mesh>
+        {/* Warm undershirt collar detail */}
+        <mesh position={[0, 0.48, 0.04]}>
+          <torusGeometry args={[0.095, 0.025, 8, 16]} />
+          <meshStandardMaterial color="#f1f5f9" roughness={0.65} />
         </mesh>
 
         {/* Left Shoulder + Elbow + Hand */}
@@ -701,11 +732,16 @@ function KidBody({
         </group>
       </group>
 
-      {/* Torso + Shoulders + Elbows + Head */}
+      {/* Torso + Backpack/Collar + Shoulders + Elbows + Head */}
       <group ref={torso} position={[0, 0.48, 0]}>
         <mesh position={[0, 0.22, 0]} castShadow>
           <capsuleGeometry args={[0.155, 0.26, 4, 8]} />
           <meshStandardMaterial color={shirt} roughness={0.62} />
+        </mesh>
+        {/* Cute kid backpack */}
+        <mesh position={[0, 0.23, -0.15]} castShadow>
+          <boxGeometry args={[0.19, 0.22, 0.1]} />
+          <meshStandardMaterial color={cap ? "#0369a1" : "#f472b6"} roughness={0.65} />
         </mesh>
 
         {/* Left Arm */}
@@ -794,6 +830,7 @@ function PlayerFamily({
   keyTapAt = 0,
   nudgeWarn = false,
   rarity = null,
+  manualInputRef,
 }: {
   phase: Phase;
   playStep: PlayStep;
@@ -810,6 +847,7 @@ function PlayerFamily({
   keyTapAt?: number;
   nudgeWarn?: boolean;
   rarity?: Rarity | null;
+  manualInputRef?: MutableRefObject<WalkKeys>;
 }) {
   const rootRef = useRef<Group>(null);
   const dadRef = useRef<Group>(null);
@@ -820,6 +858,10 @@ function PlayerFamily({
   const mayaPos = useRef(HERO_ENTRY_POS.maya.clone());
   const leoPos = useRef(HERO_ENTRY_POS.leo.clone());
   const tmpNext = useRef(new THREE.Vector3());
+  const manualActiveRef = useRef(false);
+  const manualDadGoal = useRef(DAD_BROWSE.clone());
+  const manualMayaGoal = useRef(MAYA_LEFT_VIEW.clone());
+  const manualLeoGoal = useRef(LEO_LEFT_VIEW.clone());
 
   const dadSpeed = useRef(0);
   const mayaSpeed = useRef(0);
@@ -857,6 +899,7 @@ function PlayerFamily({
     dadPos.current.copy(HERO_ENTRY_POS.dad);
     mayaPos.current.copy(HERO_ENTRY_POS.maya);
     leoPos.current.copy(HERO_ENTRY_POS.leo);
+    manualActiveRef.current = false;
     setBouncing(true);
     const id = window.setTimeout(() => setBouncing(false), 2600);
     return () => window.clearTimeout(id);
@@ -864,11 +907,18 @@ function PlayerFamily({
 
   useEffect(() => {
     if (topicBounce > 0) {
+      manualActiveRef.current = false;
       setBouncing(true);
       const id = window.setTimeout(() => setBouncing(false), 2200);
       return () => window.clearTimeout(id);
     }
   }, [topicBounce]);
+
+  useEffect(() => {
+    if (playStep === "coin_entering" || playStep === "vending" || playStep === "in_tray") {
+      manualActiveRef.current = false;
+    }
+  }, [playStep]);
 
   useLayoutEffect(() => {
     muteRaycast(rootRef.current);
@@ -959,6 +1009,39 @@ function PlayerFamily({
       dadGoal = DAD_PLINTH_VIEW;
       mayaGoal = MAYA_PLINTH_VIEW;
       leoGoal = LEO_PLINTH_VIEW;
+    }
+
+    const walkKeys = manualInputRef?.current;
+    const canFreeWalk = playStep !== "coin_entering" && playStep !== "in_tray";
+    const moveX = walkKeys ? (walkKeys.right ? 1 : 0) - (walkKeys.left ? 1 : 0) : 0;
+    const moveZ = walkKeys ? (walkKeys.down ? 1 : 0) - (walkKeys.up ? 1 : 0) : 0;
+    if (canFreeWalk && (moveX !== 0 || moveZ !== 0)) {
+      if (!manualActiveRef.current) {
+        manualActiveRef.current = true;
+        manualDadGoal.current.copy(dadPos.current);
+      }
+      const mag = Math.hypot(moveX, moveZ) || 1;
+      clampFloorClearOfPlinth(
+        manualDadGoal.current.x + (moveX / mag) * 1.15 * dt,
+        manualDadGoal.current.z + (moveZ / mag) * 1.15 * dt,
+        manualDadGoal.current,
+      );
+    }
+
+    if (canFreeWalk && manualActiveRef.current) {
+      clampFloorClearOfPlinth(
+        manualDadGoal.current.x - 0.36,
+        manualDadGoal.current.z - 0.14,
+        manualMayaGoal.current,
+      );
+      clampFloorClearOfPlinth(
+        manualDadGoal.current.x + 0.32,
+        manualDadGoal.current.z - 0.1,
+        manualLeoGoal.current,
+      );
+      dadGoal = manualDadGoal.current;
+      mayaGoal = manualMayaGoal.current;
+      leoGoal = manualLeoGoal.current;
     }
 
     const activeCoinSpot = new THREE.Vector3(0.59, 1.32, 0.39);
@@ -1520,6 +1603,7 @@ export function Crowd({
   keyTapAt = 0,
   nudgeWarn = false,
   rarity = null,
+  manualInputRef,
 }: {
   phase: Phase;
   advance: number;
@@ -1537,6 +1621,7 @@ export function Crowd({
   keyTapAt?: number;
   nudgeWarn?: boolean;
   rarity?: Rarity | null;
+  manualInputRef?: MutableRefObject<WalkKeys>;
 }) {
   const [line, setLine] = useState<Family[]>(openingQueue);
   const [leaving, setLeaving] = useState<Family | null>(null);
@@ -1586,6 +1671,7 @@ export function Crowd({
         keyTapAt={keyTapAt}
         nudgeWarn={nudgeWarn}
         rarity={rarity}
+        manualInputRef={manualInputRef}
       />
       <MallWalker seed={2} startX={-3.2} laneZ={-1.15} dir={1} />
       <MallWalker seed={5} startX={2.8} laneZ={-1.35} dir={-1} />
