@@ -1,10 +1,23 @@
 import { useEffect, useState } from "react";
-import type { CoinPlayer, GiftTopic, PlayStep } from "../stock";
+import { familyForTurn, type CoinPlayer, type FamilyProfile, type GiftTopic, type PlayStep } from "../stock";
 import type { Phase } from "../scene/Machine";
 import type { Product } from "../generate";
 
+type RemainingTopic = {
+  id: GiftTopic;
+  label: string;
+  icon: string;
+  remaining: number;
+};
+
 type Props = {
+  family?: FamilyProfile;
+  isNewFamilyGreeting?: boolean;
   topic: GiftTopic;
+  topicRemaining?: number;
+  remainingTopics?: RemainingTopic[];
+  soldOut?: boolean;
+  onMoveToTopic?: (topic: GiftTopic) => void;
   phase: Phase;
   playStep?: PlayStep;
   coinPlayer?: CoinPlayer;
@@ -12,6 +25,13 @@ type Props = {
   nudgeWarn?: boolean;
   product: Product | null;
   onNudge: () => void;
+};
+
+const TOPIC_LABELS: Record<GiftTopic, string> = {
+  technology: "Technology",
+  audio: "Audio",
+  snacks: "Snacks",
+  style: "Style",
 };
 
 const KID_LINES: Record<GiftTopic, { speaker: "Maya" | "Leo" | "Both"; text: string; sub: string }[]> = {
@@ -50,7 +70,13 @@ const NUDGE_WHISPERS = [
 ];
 
 export function KidsCompanion({
+  family = familyForTurn(0),
+  isNewFamilyGreeting = false,
   topic,
+  topicRemaining = 4,
+  remainingTopics = [],
+  soldOut = false,
+  onMoveToTopic,
   phase,
   playStep = "need_coin",
   coinPlayer = "Dad",
@@ -63,58 +89,75 @@ export function KidsCompanion({
   const [whisper, setWhisper] = useState<{ speaker: string; text: string; sub: string } | null>(null);
   const [isWiggle, setIsWiggle] = useState(false);
 
+  const older = family.olderKid;
+  const younger = family.youngerKid;
+  const parentCall = family.parentCall;
+
   useEffect(() => {
     setIndex(0);
     setWhisper(null);
     setIsWiggle(true);
     const id = window.setTimeout(() => setIsWiggle(false), 800);
     return () => window.clearTimeout(id);
-  }, [topic]);
+  }, [topic, family.id]);
 
   useEffect(() => {
     setWhisper(null);
   }, [playStep, isSuspenseHanging]);
 
-  let activeSpeech = KID_LINES[topic][index % KID_LINES[topic].length];
+  const busyPlayStep =
+    playStep === "coin_entering" ||
+    playStep === "select_item" ||
+    playStep === "vending" ||
+    playStep === "in_tray" ||
+    playStep === "collecting" ||
+    phase === "vending";
+
+  const baseLine = KID_LINES[topic][index % KID_LINES[topic].length];
+  let activeSpeech = {
+    speaker: baseLine.speaker === "Maya" ? older.name : baseLine.speaker === "Leo" ? younger.name : "Both",
+    text: baseLine.text.replaceAll("Dad", parentCall),
+    sub: baseLine.sub,
+  };
   if (whisper) {
     activeSpeech = whisper as typeof activeSpeech;
   } else if (playStep === "coin_entering") {
     if (coinPlayer === "Leo") {
       activeSpeech = {
-        speaker: "Leo",
+        speaker: younger.name,
         text: "I'm tall enough! Watch me reach up on my tiptoes and push the coin in!",
         sub: "Stretching both hands way up toward the shiny coin slot",
       };
     } else if (coinPlayer === "Maya") {
       activeSpeech = {
-        speaker: "Maya",
+        speaker: older.name,
         text: "1, 2, 3... JUMP! Dropping our lucky coin right into the slot!",
         sub: "Hopping enthusiastically with a big cheer",
       };
     } else {
       activeSpeech = {
         speaker: "Both",
-        text: "Clink!! Here goes the coin, Dad! Almost in!",
-        sub: "Watching Dad slide the coin cleanly into the acceptor",
+        text: `Clink!! Here goes the coin, ${parentCall}! Almost in!`,
+        sub: `Watching ${family.parentName} slide the coin cleanly into the acceptor`,
       };
     }
   } else if (playStep === "select_item") {
     activeSpeech = {
       speaker: "Both",
       text: "The coin went in!! Now press the buttons on the machine or tap our toy through the glass!",
-      sub: "Maya points at the shelf codes · Leo leans close to the display glass",
+      sub: `${older.name} points at the shelf codes · ${younger.name} leans close to the display glass`,
     };
   } else if (nudgeWarn) {
     activeSpeech = {
       speaker: "Both",
-      text: "HAHAHA!! Dad nudged the glass and knocked it clean off the lip!!",
-      sub: "Alarm chirps 'DO NOT SHAKE' while Maya & Leo cheer as it tumbles down!",
+      text: `HAHAHA!! ${family.parentName} nudged the glass and knocked it clean off the lip!!`,
+      sub: `Alarm chirps 'DO NOT SHAKE' while ${older.name} & ${younger.name} cheer as it tumbles down!`,
     };
   } else if (playStep === "vending" && isSuspenseHanging) {
     activeSpeech = {
       speaker: "Both",
-      text: "GASP!! IT'S BALANCED RIGHT ON THE EDGE LIP!! Tap the glass to nudge it, Dad!!",
-      sub: "Maya clasps her hands · Leo stares wide-eyed at the teetering capsule",
+      text: `GASP!! IT'S BALANCED RIGHT ON THE EDGE LIP!! Tap the glass to nudge it, ${parentCall}!!`,
+      sub: `${older.name} clasps hands · ${younger.name} stares wide-eyed at the teetering capsule`,
     };
   } else if (phase === "vending" || playStep === "vending") {
     activeSpeech = {
@@ -134,39 +177,73 @@ export function KidsCompanion({
       text: "Lifting it onto the spotlight stand... OOH OPEN IT!!",
       sub: "Pressing close around the showcase plinth as the capsule hinges open",
     };
+  } else if (soldOut) {
+    activeSpeech = {
+      speaker: "Both",
+      text:
+        phase === "revealed" && product && !isNewFamilyGreeting
+          ? `Woohoo, we got the ${product.title}! Every category is claimed now — let's come back tomorrow again!`
+          : "Every single category is claimed! Let's head home and come back tomorrow again!",
+      sub: `All 4 categories are empty today · ${older.name} & ${younger.name} wave until tomorrow's restock`,
+    };
+  } else if (topicRemaining === 0 && remainingTopics.length > 0) {
+    const next = remainingTopics[0];
+    const restText = remainingTopics.map((r) => `${r.icon} ${r.label} (${r.remaining})`).join(" · ");
+    activeSpeech = {
+      speaker: "Both",
+      text:
+        phase === "revealed" && product && !isNewFamilyGreeting
+          ? `Yay, we got the ${product.title}! All ${TOPIC_LABELS[topic]} items are claimed — ${parentCall}, let's move to ${next.label}!`
+          : `All ${TOPIC_LABELS[topic]} items are claimed! ${parentCall}, let's move the family to ${next.label}!`,
+      sub: `${restText} still available`,
+    };
+  } else if (isNewFamilyGreeting && family.id > 0) {
+    activeSpeech = {
+      speaker: "Both",
+      text: `It's our turn now, ${parentCall}!! Let's insert a $1 coin for ${TOPIC_LABELS[topic]}!`,
+      sub: `${older.name} & ${younger.name} stepped right up from the line to the glass`,
+    };
   } else if (phase === "revealed" && product) {
     if (product.rarity === "impossible") {
       activeSpeech = {
         speaker: "Both",
-        text: "DAD WHAT'S HAPPENING TO THE MACHINE?! THE WHOLE ROOM IS FLOATING INTO SPACE!! LOOK AT THE SCREEN!!",
+        text: `${parentCall.toUpperCase()} WHAT'S HAPPENING TO THE MACHINE?! THE WHOLE ROOM IS FLOATING INTO SPACE!! LOOK AT THE SCREEN!!`,
         sub: "Jumping in utter astonishment as reality glitches around the glowing cosmic anomaly",
       };
     } else if (product.rarity === "legendary") {
       activeSpeech = {
         speaker: "Both",
-        text: `NO WAY!! DAD LOOK AT THE GOLDEN LIGHT BEAMS!! IT'S A 1-OF-1 LEGENDARY!! WE ACTUALLY GOT THE ${product.title.toUpperCase()}!!`,
+        text: `NO WAY!! ${parentCall.toUpperCase()} LOOK AT THE GOLDEN LIGHT BEAMS!! IT'S A 1-OF-1 LEGENDARY!! WE ACTUALLY GOT THE ${product.title.toUpperCase()}!!`,
         sub: "Hugging each other and pointing at the glorious golden rays radiating across the case",
       };
     } else if (product.rarity === "rare") {
       activeSpeech = {
-        speaker: "Leo",
-        text: `WHOA! Look at the electric blue sparkles glowing around it!! Dad, it's hovering in the air! That's a RARE one!!`,
-        sub: "Maya: 'The aura is so pretty!!' · Eyes wide watching the swirling cyber particles",
+        speaker: younger.name,
+        text: `WHOA! Look at the electric blue sparkles glowing around it!! ${parentCall}, it's hovering in the air! That's a RARE one!!`,
+        sub: `${older.name}: 'The aura is so pretty!!' · Eyes wide watching the swirling cyber particles`,
       };
     } else {
       activeSpeech = {
-        speaker: "Maya",
-        text: `Yay, the capsule popped open! Dad, look at our ${product.title}! Can I hold it in the car?!`,
+        speaker: older.name,
+        text: `Yay, the capsule popped open! ${parentCall}, look at our ${product.title}! Can I hold it in the car?!`,
         sub: "Smiling happily as the clean capsule lid rests neatly on the tray",
       };
     }
   }
 
+  const showMoveButtons = !busyPlayStep && !soldOut && topicRemaining === 0 && remainingTopics.length > 0 && Boolean(onMoveToTopic);
+
   const handleNudge = () => {
     onNudge();
     setIsWiggle(true);
-    const nextWhisper = NUDGE_WHISPERS[Math.floor(Math.random() * NUDGE_WHISPERS.length)];
-    setWhisper(nextWhisper);
+    const pick = NUDGE_WHISPERS[Math.floor(Math.random() * NUDGE_WHISPERS.length)];
+    if (pick) {
+      setWhisper({
+        speaker: pick.speaker === "Maya" ? older.name : younger.name,
+        text: pick.text.replaceAll("Dad", parentCall),
+        sub: pick.sub,
+      });
+    }
     const id = window.setTimeout(() => setIsWiggle(false), 600);
     return () => window.clearTimeout(id);
   };
@@ -176,18 +253,18 @@ export function KidsCompanion({
       <div className="kids-bubble">
         <div className="kids-header">
           <div className="kids-avatars">
-            <span className="kid-badge girl" title="Maya (7)">
-              👧 <strong>Maya</strong> <small>7</small>
+            <span className="kid-badge girl" title={`${older.name} (${older.age})`}>
+              👧 <strong>{older.name}</strong> <small>{older.age}</small>
             </span>
-            <span className="kid-badge boy" title="Leo (5)">
-              👦 <strong>Leo</strong> <small>5</small>
+            <span className="kid-badge boy" title={`${younger.name} (${younger.age})`}>
+              👦 <strong>{younger.name}</strong> <small>{younger.age}</small>
             </span>
           </div>
           <button
             type="button"
             className="kids-nudge-btn"
             onClick={handleNudge}
-            title="Nudge Maya & Leo to hear what they say!"
+            title={`Nudge ${older.name} & ${younger.name} to hear what they say!`}
           >
             <span>Ask kids</span> ✨
           </button>
@@ -199,6 +276,23 @@ export function KidsCompanion({
           <p className="kids-quote">“{activeSpeech.text}”</p>
           <p className="kids-sub">{activeSpeech.sub}</p>
         </div>
+        {showMoveButtons ? (
+          <div className="kids-move-row">
+            {remainingTopics.map((rt) => (
+              <button
+                key={rt.id}
+                type="button"
+                className="move-topic-chip"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMoveToTopic?.(rt.id);
+                }}
+              >
+                Move to {rt.icon} {rt.label} →
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

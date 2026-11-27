@@ -1581,7 +1581,8 @@ function CoilSlot({
   const prizeRef = useRef<Group>(null);
   const [hovered, setHovered] = useState(false);
 
-  const hasItem = Boolean(mark && (!mark.claimed || isThisVending));
+  const inSelectedCategory = highlighted || isThisVending;
+  const hasItem = Boolean(mark && (!mark.claimed || isThisVending) && inSelectedCategory);
   const badgeTex = useMemo(
     () => getBadgeTexture(code, accent, isTargeted || isRouletteLit || isThisVending || hovered, !hasItem),
     [code, accent, isTargeted, isRouletteLit, isThisVending, hovered, hasItem],
@@ -1676,7 +1677,7 @@ function CoilSlot({
         <meshBasicMaterial
           map={badgeTex}
           transparent
-          opacity={!hasItem ? 0.55 : highlighted || isTargeted || isRouletteLit || hovered || isThisVending ? 1 : 0.84}
+          opacity={!hasItem ? (highlighted ? 0.45 : 0.16) : highlighted || isTargeted || isRouletteLit || hovered || isThisVending ? 1 : 0.84}
         />
       </mesh>
     </group>

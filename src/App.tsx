@@ -32,6 +32,7 @@ import { Reality } from "./scene/Reality";
 import {
   claimSlot,
   COIL_CODES,
+  familyForTurn,
   GIFT_TOPICS,
   prizeForSeed,
   resolveProduct,
@@ -181,6 +182,13 @@ export function App() {
       const slot = stock.slots.find((item) => item.index === cur);
       return slot?.topic === next ? cur : null;
     });
+    if (playStep === "select_item") {
+      setTypedCode("");
+    } else if (playStep === "revealed" && !busy) {
+      if (product) handOff(product.seed);
+      setPhase("idle");
+      setPlayStep("need_coin");
+    }
     setTopicBounce((c) => c + 1);
     unlockAudio();
     playTopicSelect(next);
@@ -223,7 +231,9 @@ export function App() {
   const handOff = (seed: string) => {
     if (handed.current === seed) return;
     handed.current = seed;
-    setAdvance((count) => count + 1);
+    if (!todayStock().soldOut) {
+      setAdvance((count) => count + 1);
+    }
   };
 
   const completeRevealFor = (next: Product, mode: "vend" | "instant") => {
@@ -254,7 +264,7 @@ export function App() {
         });
         return;
       }
-      handOff(next.seed);
+      later(1900, () => handOff(next.seed));
     };
 
     if (mode === "vend") {
@@ -265,7 +275,9 @@ export function App() {
       setMark(performance.now());
       later(REALITY_MS, () => {
         setPhase("revealed");
-        if (mode === "vend") handOff(next.seed);
+        if (mode === "vend") {
+          later(1900, () => handOff(next.seed));
+        }
       });
       return;
     }
@@ -332,15 +344,13 @@ export function App() {
     if (available.length > 0) {
       return available[Math.floor(Math.random() * available.length)];
     }
-    const anyAvailable = freshStock.slots.filter((item) => !item.claimed);
-    return anyAvailable[0];
+    return undefined;
   };
 
   const runSurpriseRoulette = () => {
     if (rouletteActive.current) return;
     const freshStock = todayStock();
-    const topicAvail = freshStock.slots.filter((item) => !item.claimed && item.topic === selectedTopicRef.current);
-    const pool = topicAvail.length > 0 ? topicAvail : freshStock.slots.filter((item) => !item.claimed);
+    const pool = freshStock.slots.filter((item) => !item.claimed && item.topic === selectedTopicRef.current);
     if (pool.length === 0) return;
 
     const chosen = pool[Math.floor(Math.random() * pool.length)];
@@ -399,7 +409,11 @@ export function App() {
       return;
     }
     const fresh = todayStock();
-    if (fresh.soldOut) return;
+    const hasInTopic = fresh.slots.some((item) => !item.claimed && item.topic === selectedTopicRef.current);
+    if (fresh.soldOut || !hasInTopic) return;
+    if (phase === "revealed" && product) {
+      handOff(product.seed);
+    }
 
     const ms = coinPlayer === "Dad" ? DAD_COIN_MS : KID_COIN_MS;
     setCoinDurationMs(ms);
@@ -492,7 +506,7 @@ export function App() {
     if (["A", "B", "C", "D"].includes(key)) {
       setTypedCode(key);
       const topicMap: Record<string, GiftTopic> = { A: "technology", B: "audio", C: "snacks", D: "style" };
-      if (topicMap[key]) setSelectedTopic(topicMap[key]);
+      if (topicMap[key]) chooseTopic(topicMap[key]);
       return;
     }
     if (["1", "2", "3", "4"].includes(key)) {
@@ -539,10 +553,30 @@ export function App() {
     if (playStep === "select_item") {
       if (targetedSlotRef.current !== null || typedCodeRef.current.length === 2) {
         const slot = resolveSlotToVend();
-        if (slot) startVendSlot(slot);
-      } else {
-        runSurpriseRoulette();
+        if (slot) {
+          startVendSlot(slot);
+          return;
+        }
       }
+      const freshStock = todayStock();
+      const hasCurrentTopic = freshStock.slots.some((item) => !item.claimed && item.topic === selectedTopicRef.current);
+      if (!hasCurrentTopic) {
+        const nextTopic = GIFT_TOPICS.find(
+          (t) => t.id !== selectedTopicRef.current && freshStock.slots.some((item) => !item.claimed && item.topic === t.id),
+        );
+        if (nextTopic) chooseTopic(nextTopic.id);
+        return;
+      }
+      runSurpriseRoulette();
+      return;
+    }
+    const freshStock = todayStock();
+    const hasCurrentTopic = freshStock.slots.some((item) => !item.claimed && item.topic === selectedTopicRef.current);
+    if (!hasCurrentTopic) {
+      const nextTopic = GIFT_TOPICS.find(
+        (t) => t.id !== selectedTopicRef.current && freshStock.slots.some((item) => !item.claimed && item.topic === t.id),
+      );
+      if (nextTopic) chooseTopic(nextTopic.id);
       return;
     }
     handleInsertCoin();
@@ -705,6 +739,15 @@ export function App() {
   };
 
   const sky = product?.payload.kind === "reality" ? product.payload.sky : "#14110e";
+  const activeFamily = familyForTurn(advance);
+  const coinPlayerLabel =
+    coinPlayer === "Dad"
+      ? activeFamily.parentName
+      : coinPlayer === "Leo"
+        ? activeFamily.youngerKid.name
+        : activeFamily.olderKid.name;
+  const isNewFamilyGreeting =
+    advance > 0 && playStep === "revealed" && Boolean(product && handed.current === product.seed);
   const busy =
     playStep === "coin_entering" ||
     playStep === "collecting" ||
@@ -714,6 +757,14 @@ export function App() {
   const topicStock = stock.slots.filter((item) => item.topic === selectedTopic);
   const availableGifts = topicStock.filter((item) => !item.claimed);
   const selectedGift = availableGifts[0] ?? null;
+  const remainingTopics = GIFT_TOPICS.map((topic) => ({
+    id: topic.id,
+    label: topic.label,
+    icon: topic.icon,
+    remaining: stock.slots.filter((slot) => !slot.claimed && slot.topic === topic.id).length,
+  })).filter((topic) => topic.remaining > 0);
+  const currentTopicInfo = GIFT_TOPICS.find((topic) => topic.id === selectedTopic) ?? GIFT_TOPICS[0];
+  const nextAvailableTopic = remainingTopics.find((topic) => topic.id !== selectedTopic) ?? remainingTopics[0] ?? null;
   const targetedSlot = targetedSlotIndex !== null ? stock.slots.find((item) => item.index === targetedSlotIndex && !item.claimed) ?? null : null;
   const showPlinth = (phase === "revealed" && playStep === "revealed") && !moment;
   const impossibleKept = cabinet.some((item) => item.rarity === "impossible");
@@ -729,11 +780,15 @@ export function App() {
 
   const readout: Readout = closed
     ? {
-        label: "Sold out",
-        text: stock.soldOut ? "Case empty until tomorrow." : "Try another gift shelf.",
+        label: stock.soldOut ? "Sold out" : "Category empty",
+        text: stock.soldOut
+          ? "Come back tomorrow again."
+          : nextAvailableTopic
+            ? `Move to ${nextAvailableTopic.label}`
+            : "Try another gift shelf.",
         detail: stock.soldOut
-          ? "Every daily gift has been vended. Tomorrow brings fresh prizes."
-          : `All ${GIFT_TOPICS.find((topic) => topic.id === selectedTopic)?.label.toLowerCase()} slots are empty.`,
+          ? "Every category has been claimed for today. Tomorrow brings fresh prizes."
+          : `All ${currentTopicInfo?.label ?? selectedTopic} items claimed! Ask the family to move to ${remainingTopics.map((r) => `${r.label} (${r.remaining})`).join(", ")}.`,
         tone: "warn",
       }
     : nudgeWarn
@@ -745,8 +800,8 @@ export function App() {
         }
       : playStep === "coin_entering"
         ? {
-            label: coinPlayer,
-            text: `${coinPlayer} is inserting the coin`,
+            label: coinPlayerLabel,
+            text: `${coinPlayerLabel} is inserting the coin`,
             detail: "Dropping a shiny $1 coin down the validator slot.",
             tone: "warn",
           }
@@ -786,14 +841,14 @@ export function App() {
                   ? {
                       label: `Slot ${targetedSlot.code}`,
                       text: targetedSlot.product.title,
-                      detail: `${targetedSlot.code} selected ($1). Drag or insert coin with ${coinPlayer} to vend.`,
+                      detail: `${targetedSlot.code} selected ($1). Drag or insert coin with ${coinPlayerLabel} to vend.`,
                       tone: "warn",
                     }
                   : phase === "idle" && selectedGift
                     ? {
                         label: "Ready $1",
                         text: "Pick a coil & insert coin",
-                        detail: `Choose ${coinPlayer} to drop the coin, or drag the gold $1 coin from the side tray into the slot.`,
+                        detail: `Choose ${coinPlayerLabel} to drop the coin, or drag the gold $1 coin from the side tray into the slot.`,
                         tone: "calm",
                       }
                     : displayLine({
@@ -811,21 +866,27 @@ export function App() {
 
   const actionDisabled =
     busy ||
-    (playStep !== "in_tray" && playStep !== "select_item" && playStep !== "vending" && stock.soldOut) ||
-    (playStep === "need_coin" && !selectedGift && stock.soldOut);
+    (playStep !== "in_tray" && playStep !== "select_item" && playStep !== "vending" && stock.soldOut);
 
   const actionLabel = () => {
-    if (playStep === "coin_entering") return `${coinPlayer} inserting coin...`;
+    if (playStep === "coin_entering") return `${coinPlayerLabel} inserting coin...`;
     if (playStep === "vending" && isSuspenseHanging) return "Nudge Glass Loose!";
     if (playStep === "vending" || phase === "vending") return "Spiral Coil Turning...";
     if (playStep === "collecting") return "Opening Capsule...";
     if (phase === "reality") return "Five Seconds";
     if (playStep === "in_tray") return "Push Flap & Grab Prize!";
-    if (playStep === "select_item") return typedCode ? `Dispense ${typedCode}` : "Kids' Pick Surprise!";
+    if (playStep === "select_item") {
+      if (!selectedGift && nextAvailableTopic) return `Move to ${nextAvailableTopic.icon} ${nextAvailableTopic.label}`;
+      return typedCode ? `Dispense ${typedCode}` : "Kids' Pick Surprise!";
+    }
     if (stock.soldOut) return "Come Back Tomorrow";
-    if (!selectedGift && playStep === "need_coin") return "Choose Another Shelf";
-    if (targetedSlot) return `${coinPlayer}: Insert Coin for ${targetedSlot.code}`;
-    return product ? `${coinPlayer}: Insert Another $1 Coin` : `${coinPlayer}: Insert $1 Coin`;
+    if (!selectedGift && nextAvailableTopic) return `Move to ${nextAvailableTopic.icon} ${nextAvailableTopic.label}`;
+    if (targetedSlot) return `${coinPlayerLabel}: Insert Coin for ${targetedSlot.code}`;
+    return isNewFamilyGreeting
+      ? `${coinPlayerLabel}: Next Family Insert $1`
+      : product
+        ? `${coinPlayerLabel}: Insert Another $1 Coin`
+        : `${coinPlayerLabel}: Insert $1 Coin`;
   };
 
   return (
@@ -840,7 +901,9 @@ export function App() {
           <div>
             <div className="kicker-row">
               <p className="kicker">Starlight Mall · Level 2 Arcade</p>
-              <span className="kids-status-pill">👧 Maya & 👦 Leo at the glass</span>
+              <span className="kids-status-pill">
+                👧 {activeFamily.olderKid.name} &amp; 👦 {activeFamily.youngerKid.name} at the glass
+              </span>
               <button
                 type="button"
                 className="journey-trigger-btn"
@@ -939,7 +1002,7 @@ export function App() {
                 vendMs={VEND_MS}
                 collectStarted={collectMark}
                 product={product}
-                canInsert={!busy && !stock.soldOut}
+                canInsert={!busy && !stock.soldOut && Boolean(selectedGift)}
                 onInsert={handleInsertCoin}
                 onCoinReturn={handleCoinReturn}
                 onNudgeMachine={handleNudgeMachine}
@@ -994,7 +1057,13 @@ export function App() {
           </Canvas>
 
           <KidsCompanion
+            family={activeFamily}
+            isNewFamilyGreeting={isNewFamilyGreeting}
             topic={selectedTopic}
+            topicRemaining={availableGifts.length}
+            remainingTopics={remainingTopics}
+            soldOut={stock.soldOut}
+            onMoveToTopic={chooseTopic}
             phase={phase}
             playStep={playStep}
             coinPlayer={coinPlayer}
@@ -1080,15 +1149,22 @@ export function App() {
         <div className="controls">
           {!stock.soldOut ? (
             <div className="topic-picker" aria-label="Choose a gift topic">
-              <p className="kicker">Choose a shelf topic · Click any prize through the glass</p>
+              <p className="kicker">Choose a category · Only selected category items are shown</p>
               <div className="topic-options" role="group" aria-label="Gift topics">
                 {GIFT_TOPICS.map((topic) => {
                   const available = stock.slots.filter((slot) => !slot.claimed && slot.topic === topic.id);
+                  const classes = [
+                    "topic-option",
+                    selectedTopic === topic.id ? "selected" : "",
+                    available.length === 0 ? "sold-out" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
                   return (
                     <button
                       key={topic.id}
                       type="button"
-                      className={selectedTopic === topic.id ? "topic-option selected" : "topic-option"}
+                      className={classes}
                       aria-pressed={selectedTopic === topic.id}
                       onClick={() => chooseTopic(topic.id)}
                     >
@@ -1098,7 +1174,7 @@ export function App() {
                       </div>
                       <span className="topic-vote">{topic.kidsVote}</span>
                       <small>
-                        {available.length ? `${available.length} gift${available.length === 1 ? "" : "s"} left` : "Sold out today"}
+                        {available.length ? `${available.length} gift${available.length === 1 ? "" : "s"} left` : "All claimed"}
                       </small>
                     </button>
                   );
@@ -1108,30 +1184,58 @@ export function App() {
           ) : null}
           {closed ? (
             <div className="next-ask closed-note" role="status">
-              <p className="kicker">Shelf empty</p>
-              <h2>{stock.soldOut ? "Come back tomorrow" : "Choose another shelf"}</h2>
+              <p className="kicker">{stock.soldOut ? "All categories empty" : `${currentTopicInfo?.label ?? selectedTopic} finished`}</p>
+              <h2>{stock.soldOut ? "Come back tomorrow again" : "Move family to another category"}</h2>
               <p>
                 {stock.soldOut
-                  ? "Today's gifts are finished. Come back tomorrow for a restocked machine."
-                  : `There are no ${GIFT_TOPICS.find((topic) => topic.id === selectedTopic)?.label.toLowerCase()} gifts left today.`}
+                  ? "Every category and prize for today has been claimed. Come back tomorrow again for a restocked machine."
+                  : `All ${currentTopicInfo?.label ?? selectedTopic} items are claimed! Ask the family to move to a remaining category:`}
               </p>
+              {!stock.soldOut && remainingTopics.length > 0 ? (
+                <div className="closed-move-links">
+                  {remainingTopics.map((rt) => (
+                    <button
+                      key={rt.id}
+                      type="button"
+                      className="move-topic-chip"
+                      onClick={() => chooseTopic(rt.id)}
+                    >
+                      {rt.icon} Move to {rt.label} ({rt.remaining} left) →
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
           <div className="coin-action-row">
             <div className="coin-player-toggle" role="group" aria-label="Who inserts the coin">
-              {(["Dad", "Leo", "Maya"] as const).map((member) => (
-                <button
-                  key={member}
-                  type="button"
-                  className={coinPlayer === member ? "coin-player-pill active" : "coin-player-pill"}
-                  aria-pressed={coinPlayer === member}
-                  disabled={busy}
-                  onClick={() => chooseCoinPlayer(member)}
-                  title={`Let ${member} insert the coin`}
-                >
-                  {member === "Dad" ? "🧔 Dad" : member === "Leo" ? "👦 Leo" : "👧 Maya"}
-                </button>
-              ))}
+              {(["Dad", "Leo", "Maya"] as const).map((member) => {
+                const label =
+                  member === "Dad"
+                    ? `${activeFamily.parentIcon} ${activeFamily.parentName}`
+                    : member === "Leo"
+                      ? `👦 ${activeFamily.youngerKid.name}`
+                      : `👧 ${activeFamily.olderKid.name}`;
+                const cleanName =
+                  member === "Dad"
+                    ? activeFamily.parentName
+                    : member === "Leo"
+                      ? activeFamily.youngerKid.name
+                      : activeFamily.olderKid.name;
+                return (
+                  <button
+                    key={member}
+                    type="button"
+                    className={coinPlayer === member ? "coin-player-pill active" : "coin-player-pill"}
+                    aria-pressed={coinPlayer === member}
+                    disabled={busy}
+                    onClick={() => chooseCoinPlayer(member)}
+                    title={`Let ${cleanName} insert the coin`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
             <button type="button" className="coin" disabled={actionDisabled} onClick={handlePrimaryAction}>
               {actionLabel()}
@@ -1149,19 +1253,29 @@ export function App() {
           </div>
           <p>
             {stock.soldOut && playStep !== "in_tray" && playStep !== "collecting"
-              ? "The case is empty until tomorrow."
-              : playStep === "select_item"
-                ? "Credit $1 in! Click a shelf capsule, use the 3D keypad (keys A–D, 1–4), or hit Kids' Pick."
-                : playStep === "vending" && isSuspenseHanging
-                  ? "Balanced on the shelf edge! Click the glass, press Space, or hit Nudge to drop it!"
-                  : playStep === "in_tray"
-                    ? "Thud! Look inside the bottom pickup pocket — push the green flap to grab & open your prize!"
-                    : `${stock.remaining} gifts in case · Drag the gold $1 coin from the side tray into the slot or press Enter.`}
+              ? "All categories are empty today — come back tomorrow again!"
+              : !selectedGift && nextAvailableTopic && playStep !== "in_tray" && playStep !== "collecting"
+                ? `All ${currentTopicInfo?.label ?? selectedTopic} items claimed — move to ${nextAvailableTopic.label} (${remainingTopics.length} categor${remainingTopics.length === 1 ? "y" : "ies"} left).`
+                : playStep === "select_item"
+                  ? "Credit $1 in! Click a shelf capsule, use the 3D keypad (keys A–D, 1–4), or hit Kids' Pick."
+                  : playStep === "vending" && isSuspenseHanging
+                    ? "Balanced on the shelf edge! Click the glass, press Space, or hit Nudge to drop it!"
+                    : playStep === "in_tray"
+                      ? "Thud! Look inside the bottom pickup pocket — push the green flap to grab & open your prize!"
+                      : `${availableGifts.length} ${currentTopicInfo?.label.toLowerCase()} gift${availableGifts.length === 1 ? "" : "s"} left (${stock.remaining} total) · Drag the gold $1 coin or press Enter.`}
           </p>
         </div>
       </main>
       <aside className="side">
-        <StockBoard slots={topicStock} selectedSlotIndex={targetedSlotIndex} onSelectSlot={handleSelectSlot} />
+        <StockBoard
+          slots={topicStock}
+          selectedSlotIndex={targetedSlotIndex}
+          onSelectSlot={handleSelectSlot}
+          topicLabel={currentTopicInfo?.label ?? selectedTopic}
+          remainingTopics={remainingTopics}
+          soldOut={stock.soldOut}
+          onMoveToTopic={chooseTopic}
+        />
         <Receipt
           product={playStep === "revealed" ? product : null}
           copied={copied}

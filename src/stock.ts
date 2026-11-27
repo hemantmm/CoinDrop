@@ -25,6 +25,103 @@ type MallPrize = {
 
 export type GiftTopic = "technology" | "audio" | "snacks" | "style";
 export type CoinPlayer = "Dad" | "Leo" | "Maya";
+
+export type FamilyMemberProfile = {
+  name: string;
+  age: number;
+  shirt: string;
+  hair: string;
+  shoes: string;
+  cap: boolean;
+};
+
+export type FamilyProfile = {
+  id: number;
+  parentName: string;
+  parentCall: string;
+  parentIcon: string;
+  coat: string;
+  skin: string;
+  hair: string;
+  bag: boolean;
+  olderKid: FamilyMemberProfile;
+  youngerKid: FamilyMemberProfile;
+};
+
+export const FAMILY_ROSTER: Omit<FamilyProfile, "id">[] = [
+  {
+    parentName: "Dad",
+    parentCall: "Dad",
+    parentIcon: "🧔",
+    coat: "#1e293b",
+    skin: "#e4b48f",
+    hair: "#241c18",
+    bag: false,
+    olderKid: { name: "Maya", age: 7, shirt: "#ff5f8f", hair: "#2a1d17", shoes: "#f8fafc", cap: false },
+    youngerKid: { name: "Leo", age: 5, shirt: "#38bdf8", hair: "#1a1412", shoes: "#facc15", cap: true },
+  },
+  {
+    parentName: "Mom",
+    parentCall: "Mom",
+    parentIcon: "👩",
+    coat: "#6a3034",
+    skin: "#c68642",
+    hair: "#1a1412",
+    bag: true,
+    olderKid: { name: "Zoe", age: 8, shirt: "#f59e0b", hair: "#1a1412", shoes: "#fef3c7", cap: false },
+    youngerKid: { name: "Max", age: 5, shirt: "#10b981", hair: "#2a1810", shoes: "#ffffff", cap: true },
+  },
+  {
+    parentName: "Uncle Sam",
+    parentCall: "Uncle Sam",
+    parentIcon: "🧑",
+    coat: "#2c4a3c",
+    skin: "#8d5524",
+    hair: "#1a1412",
+    bag: false,
+    olderKid: { name: "Aria", age: 7, shirt: "#a855f7", hair: "#1c1614", shoes: "#f3e8ff", cap: false },
+    youngerKid: { name: "Noah", age: 6, shirt: "#fb7185", hair: "#1a1412", shoes: "#e0f2fe", cap: true },
+  },
+  {
+    parentName: "Aunt Priya",
+    parentCall: "Aunt Priya",
+    parentIcon: "👩",
+    coat: "#4d4030",
+    skin: "#d2996c",
+    hair: "#1c1614",
+    bag: true,
+    olderKid: { name: "Riya", age: 8, shirt: "#06b6d4", hair: "#1c1614", shoes: "#ecfeff", cap: false },
+    youngerKid: { name: "Aarav", age: 5, shirt: "#f97316", hair: "#1a1412", shoes: "#fef08a", cap: true },
+  },
+  {
+    parentName: "Marcus",
+    parentCall: "Dad",
+    parentIcon: "👨",
+    coat: "#3a3558",
+    skin: "#6b3e26",
+    hair: "#1a1412",
+    bag: false,
+    olderKid: { name: "Chloe", age: 7, shirt: "#ec4899", hair: "#241c18", shoes: "#ffffff", cap: false },
+    youngerKid: { name: "Toby", age: 6, shirt: "#facc15", hair: "#1a1412", shoes: "#0ea5e9", cap: true },
+  },
+  {
+    parentName: "Alex",
+    parentCall: "Dad",
+    parentIcon: "🧔",
+    coat: "#243044",
+    skin: "#f0c7a4",
+    hair: "#4a3222",
+    bag: true,
+    olderKid: { name: "Emma", age: 7, shirt: "#34d399", hair: "#3b2316", shoes: "#ffffff", cap: false },
+    youngerKid: { name: "Eli", age: 5, shirt: "#60a5fa", hair: "#5a3a22", shoes: "#f43f5e", cap: true },
+  },
+];
+
+export function familyForTurn(turn: number): FamilyProfile {
+  const safeTurn = Math.max(0, Math.floor(turn));
+  const base = FAMILY_ROSTER[safeTurn % FAMILY_ROSTER.length] ?? FAMILY_ROSTER[0];
+  return { ...base, id: safeTurn };
+}
 export type PlayStep =
   | "need_coin"
   | "coin_entering"

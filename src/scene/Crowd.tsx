@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import type { Group } from "three";
 import * as THREE from "three";
 import type { Rarity } from "../generate";
-import type { CoinPlayer, GiftTopic, PlayStep } from "../stock";
+import { familyForTurn, type CoinPlayer, type FamilyProfile, type GiftTopic, type PlayStep } from "../stock";
 import { SHELF_SPOTS, type Phase } from "./Machine";
 
 export type WalkKeys = {
@@ -34,11 +34,10 @@ type KidLook = {
   shoes: string;
   scale: number;
   point: boolean;
+  cap?: boolean;
 };
 
-type Family = Look & {
-  id: number;
-  bag: boolean;
+type Family = FamilyProfile & {
   joined: number;
   kids: [KidLook, KidLook];
 };
@@ -81,7 +80,6 @@ const QUEUE_SPREAD = {
   ] as [number, number, number][],
 };
 
-const SHIRTS = ["#f2c14e", "#e25b4a", "#3d9b8f", "#7aa2d6"];
 const SPAWN: [number, number, number] = [4.0, 0, 0.72];
 const EXIT: [number, number, number] = [-2.95, 0, 2.55];
 
@@ -138,28 +136,36 @@ const TOPIC_ROW_INDEX: Record<GiftTopic, number> = {
   style: 3,
 };
 
-let nextPersonId = 1;
-
-function makeFamily(joined: number): Family {
-  const look = LOOKS[nextPersonId % LOOKS.length] ?? LOOKS[0];
-  const shirtA = SHIRTS[nextPersonId % SHIRTS.length] ?? SHIRTS[0];
-  const shirtB = SHIRTS[(nextPersonId + 2) % SHIRTS.length] ?? SHIRTS[1];
-  const family: Family = {
-    id: nextPersonId,
-    ...look,
-    bag: nextPersonId % 2 === 0,
+function makeFamilyForTurn(turnIndex: number, joined: number): Family {
+  const profile = familyForTurn(turnIndex);
+  return {
+    ...profile,
     joined,
     kids: [
-      { shirt: shirtA, skin: look.skin, hair: look.hair, shoes: shirtB, scale: 0.78, point: true },
-      { shirt: shirtB, skin: look.skin, hair: "#1a1412", shoes: shirtA, scale: 0.66, point: false },
+      {
+        shirt: profile.olderKid.shirt,
+        skin: profile.skin,
+        hair: profile.olderKid.hair,
+        shoes: profile.olderKid.shoes,
+        scale: 0.78,
+        point: true,
+        cap: profile.olderKid.cap,
+      },
+      {
+        shirt: profile.youngerKid.shirt,
+        skin: profile.skin,
+        hair: profile.youngerKid.hair,
+        shoes: profile.youngerKid.shoes,
+        scale: 0.66,
+        point: false,
+        cap: profile.youngerKid.cap,
+      },
     ],
   };
-  nextPersonId += 1;
-  return family;
 }
 
-function openingQueue(): Family[] {
-  return [0, 1, 2].map(() => makeFamily(0));
+function openingQueue(startTurn: number): Family[] {
+  return [1, 2, 3].map((offset) => makeFamilyForTurn(startTurn + offset, 0));
 }
 
 function yawTowardPoint(from: [number, number, number], to: [number, number, number]) {
@@ -815,6 +821,8 @@ function muteRaycast(group: Group | null) {
 }
 
 function PlayerFamily({
+  family,
+  fromQueue = false,
   phase,
   playStep,
   coinPlayer,
@@ -832,6 +840,8 @@ function PlayerFamily({
   rarity = null,
   manualInputRef,
 }: {
+  family: Family;
+  fromQueue?: boolean;
   phase: Phase;
   playStep: PlayStep;
   coinPlayer: CoinPlayer;
@@ -854,14 +864,36 @@ function PlayerFamily({
   const mayaRef = useRef<Group>(null);
   const leoRef = useRef<Group>(null);
 
-  const dadPos = useRef(HERO_ENTRY_POS.dad.clone());
-  const mayaPos = useRef(HERO_ENTRY_POS.maya.clone());
-  const leoPos = useRef(HERO_ENTRY_POS.leo.clone());
+  const initialSpawns = useMemo(() => {
+    if (!fromQueue) {
+      return {
+        dad: HERO_ENTRY_POS.dad.clone(),
+        maya: HERO_ENTRY_POS.maya.clone(),
+        leo: HERO_ENTRY_POS.leo.clone(),
+      };
+    }
+    const q = QUEUE_ANCHORS[0];
+    const [k0x, , k0z] = QUEUE_SPREAD.kids[0];
+    const [k1x, , k1z] = QUEUE_SPREAD.kids[1];
+    return {
+      dad: new THREE.Vector3(q[0], 0, q[2]),
+      maya: new THREE.Vector3(q[0] + k0x, 0, q[2] + k0z),
+      leo: new THREE.Vector3(q[0] + k1x, 0, q[2] + k1z),
+    };
+    // Initial mount coordinates only; key={family.id} remounts cleanly per family.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const dadPos = useRef(initialSpawns.dad.clone());
+  const mayaPos = useRef(initialSpawns.maya.clone());
+  const leoPos = useRef(initialSpawns.leo.clone());
   const tmpNext = useRef(new THREE.Vector3());
   const manualActiveRef = useRef(false);
   const manualDadGoal = useRef(DAD_BROWSE.clone());
   const manualMayaGoal = useRef(MAYA_LEFT_VIEW.clone());
   const manualLeoGoal = useRef(LEO_LEFT_VIEW.clone());
+  const seenArrivalSeq = useRef(arrivalSeq);
+  const staleRevealRef = useRef(phase === "revealed" && fromQueue);
 
   const dadSpeed = useRef(0);
   const mayaSpeed = useRef(0);
@@ -893,9 +925,18 @@ function PlayerFamily({
   const mayaYaw = useRef(-1.0);
   const leoYaw = useRef(-1.0);
 
-  const [bouncing, setBouncing] = useState(false);
+  const [bouncing, setBouncing] = useState(() => fromQueue);
 
   useEffect(() => {
+    if (fromQueue) {
+      const id = window.setTimeout(() => setBouncing(false), 1800);
+      return () => window.clearTimeout(id);
+    }
+  }, [fromQueue]);
+
+  useEffect(() => {
+    if (arrivalSeq === seenArrivalSeq.current) return;
+    seenArrivalSeq.current = arrivalSeq;
     dadPos.current.copy(HERO_ENTRY_POS.dad);
     mayaPos.current.copy(HERO_ENTRY_POS.maya);
     leoPos.current.copy(HERO_ENTRY_POS.leo);
@@ -915,10 +956,13 @@ function PlayerFamily({
   }, [topicBounce]);
 
   useEffect(() => {
+    if (playStep !== "revealed" || phase !== "revealed") {
+      staleRevealRef.current = false;
+    }
     if (playStep === "coin_entering" || playStep === "vending" || playStep === "in_tray") {
       manualActiveRef.current = false;
     }
-  }, [playStep]);
+  }, [playStep, phase]);
 
   useLayoutEffect(() => {
     muteRaycast(rootRef.current);
@@ -948,6 +992,7 @@ function PlayerFamily({
     const dt = Math.min(0.05, delta);
     const cT = coinProgress();
     const vT = vendProgress();
+    const activeReveal = phase === "revealed" && !staleRevealRef.current;
 
     // Dynamic natural wandering goals per character based on current game beat!
     const browseCycle = Math.floor(t / 3.4);
@@ -1005,7 +1050,7 @@ function PlayerFamily({
       dadGoal = DAD_COLLECT_STAND;
       mayaGoal = MAYA_PLINTH_VIEW;
       leoGoal = LEO_PLINTH_VIEW;
-    } else if (phase === "revealed") {
+    } else if (activeReveal) {
       dadGoal = DAD_PLINTH_VIEW;
       mayaGoal = MAYA_PLINTH_VIEW;
       leoGoal = LEO_PLINTH_VIEW;
@@ -1048,7 +1093,7 @@ function PlayerFamily({
     const activeTargetLook =
       playStep === "in_tray"
         ? TRAY_CENTER
-        : phase === "revealed" || playStep === "collecting"
+        : activeReveal || playStep === "collecting"
           ? PLINTH_CENTER
           : playStep === "vending" && vT > 0.69
             ? TRAY_CENTER
@@ -1128,7 +1173,7 @@ function PlayerFamily({
       mayaCr = 0.55;
       leoCr = 0.65;
       dadCr = 0.28;
-    } else if (phase === "revealed") {
+    } else if (activeReveal) {
       if (rarity === "legendary") {
         mayaY = Math.abs(Math.sin(t * 7.5)) * 0.11;
         leoY = Math.abs(Math.sin(t * 8.2 + 0.8)) * 0.13;
@@ -1201,6 +1246,7 @@ function PlayerFamily({
           ? COIN_SLOT_WORLD
           : activeTargetLook;
 
+    const briskCoinWalk = playStep === "coin_entering";
     stepActor(
       dadRef.current,
       dadPos.current,
@@ -1208,7 +1254,7 @@ function PlayerFamily({
       dadYaw,
       dadSpeed,
       dadPhase,
-      1.15,
+      briskCoinWalk ? 2.15 : 1.15,
       false,
       dadLookTarget,
       0,
@@ -1223,7 +1269,7 @@ function PlayerFamily({
       mayaYaw,
       mayaSpeed,
       mayaPhase,
-      1.45,
+      briskCoinWalk ? 2.25 : 1.45,
       true,
       mayaLookTarget,
       mayaY,
@@ -1238,7 +1284,7 @@ function PlayerFamily({
       leoYaw,
       leoSpeed,
       leoPhase,
-      1.55,
+      briskCoinWalk ? 2.25 : 1.55,
       true,
       leoLookTarget,
       leoY,
@@ -1249,6 +1295,7 @@ function PlayerFamily({
   });
 
   const recentlyTappedKey = keyTapAt > 0 && Date.now() - keyTapAt < 450;
+  const activeReveal = phase === "revealed" && !staleRevealRef.current;
 
   // Dynamic upper-body arm poses
   const dadPose: PoseInput = {
@@ -1258,7 +1305,7 @@ function PlayerFamily({
     headYawRef: dadHeadYaw,
     spineLeanRef: dadLean,
     kneeCrouchRef: dadCrouch,
-    clapping: phase === "revealed" && (rarity === "rare" || rarity === "legendary"),
+    clapping: activeReveal && (rarity === "rare" || rarity === "legendary"),
     rightArmTarget:
       nudgeWarn
         ? [-1.35, 0.25, -0.3]
@@ -1284,14 +1331,14 @@ function PlayerFamily({
     spineLeanRef: mayaLean,
     kneeCrouchRef: mayaCrouch,
     tiptoeRef: mayaTiptoe,
-    clapping: phase === "revealed" && rarity !== "impossible",
+    clapping: activeReveal && rarity !== "impossible",
     leftArmTarget: isSuspenseHanging
       ? [-1.45, 0.38, -0.18] // Hands to cheeks/face in suspense gasp
       : mayaCoinReach
         ? [-2.55, 0.1, 0.35] // High joyful cheer arm
         : playStep === "need_coin" && coinPlayer === "Maya"
           ? [-0.85, -0.1, 0.18]
-          : rarity === "impossible" && phase === "revealed"
+          : rarity === "impossible" && activeReveal
             ? [-1.25, -0.4, 0.65]
             : undefined,
     rightArmTarget: isSuspenseHanging
@@ -1302,7 +1349,7 @@ function PlayerFamily({
           ? [-1.25, 0.1, -0.12]
           : playStep === "select_item" || playStep === "vending" || playStep === "need_coin"
             ? [-1.15, 0.15, -0.15]
-            : rarity === "impossible" && phase === "revealed"
+            : rarity === "impossible" && activeReveal
               ? [-1.25, 0.4, -0.65]
               : undefined,
     elbowBendL: isSuspenseHanging ? -1.55 : mayaCoinReach ? -0.25 : undefined,
@@ -1318,14 +1365,14 @@ function PlayerFamily({
     spineLeanRef: leoLean,
     kneeCrouchRef: leoCrouch,
     tiptoeRef: leoTiptoe,
-    clapping: phase === "revealed" && rarity !== "impossible",
+    clapping: activeReveal && rarity !== "impossible",
     leftArmTarget: isSuspenseHanging
       ? [-1.45, 0.38, -0.18]
       : leoCoinReach
         ? [-2.65, 0.08, 0.28] // Both hands stretched high on tiptoes!
         : playStep === "need_coin" && coinPlayer === "Leo"
           ? [-0.95, -0.15, 0.2]
-          : rarity === "impossible" && phase === "revealed"
+          : rarity === "impossible" && activeReveal
             ? [-1.35, -0.45, 0.7]
             : undefined,
     rightArmTarget: isSuspenseHanging
@@ -1336,7 +1383,7 @@ function PlayerFamily({
           ? [-1.32, 0.08, -0.1]
           : playStep === "select_item" || playStep === "vending" || bouncing
             ? [-1.22, 0.12, -0.15]
-            : rarity === "impossible" && phase === "revealed"
+            : rarity === "impossible" && activeReveal
               ? [-1.35, 0.45, -0.7]
               : undefined,
     elbowBendL: isSuspenseHanging ? -1.55 : leoCoinReach ? -0.12 : undefined,
@@ -1345,26 +1392,52 @@ function PlayerFamily({
 
   const kidExpression: Expression = isSuspenseHanging
     ? "gasp"
-    : phase === "revealed" || playStep === "in_tray" || playStep === "coin_entering" || bouncing
+    : activeReveal || playStep === "in_tray" || playStep === "coin_entering" || bouncing
       ? "cheer"
       : "calm";
 
   const dadExpression: Expression = isSuspenseHanging
     ? "gasp"
-    : phase === "revealed" || nudgeWarn
+    : activeReveal || nudgeWarn
       ? "cheer"
       : "calm";
 
   return (
     <group ref={rootRef}>
-      <group ref={dadRef} position={[HERO_ENTRY_POS.dad.x, 0, HERO_ENTRY_POS.dad.z]}>
-        <Body coat="#1e293b" skin="#e4b48f" hair="#241c18" bag={false} pose={dadPose} expression={dadExpression} seed={1} />
+      <group ref={dadRef} position={[initialSpawns.dad.x, 0, initialSpawns.dad.z]}>
+        <Body
+          coat={family.coat}
+          skin={family.skin}
+          hair={family.hair}
+          bag={family.bag}
+          pose={dadPose}
+          expression={dadExpression}
+          seed={family.id * 17 + 1}
+        />
       </group>
-      <group ref={mayaRef} position={[HERO_ENTRY_POS.maya.x, 0, HERO_ENTRY_POS.maya.z]} scale={0.78}>
-        <KidBody shirt="#ff5f8f" skin="#e4b48f" hair="#2a1d17" shoes="#f8fafc" cap={false} pose={mayaPose} expression={kidExpression} seed={11} />
+      <group ref={mayaRef} position={[initialSpawns.maya.x, 0, initialSpawns.maya.z]} scale={0.78}>
+        <KidBody
+          shirt={family.olderKid.shirt}
+          skin={family.skin}
+          hair={family.olderKid.hair}
+          shoes={family.olderKid.shoes}
+          cap={family.olderKid.cap}
+          pose={mayaPose}
+          expression={kidExpression}
+          seed={family.id * 17 + 11}
+        />
       </group>
-      <group ref={leoRef} position={[HERO_ENTRY_POS.leo.x, 0, HERO_ENTRY_POS.leo.z]} scale={0.66}>
-        <KidBody shirt="#38bdf8" skin="#e4b48f" hair="#1a1412" shoes="#facc15" cap pose={leoPose} expression={kidExpression} seed={29} />
+      <group ref={leoRef} position={[initialSpawns.leo.x, 0, initialSpawns.leo.z]} scale={0.66}>
+        <KidBody
+          shirt={family.youngerKid.shirt}
+          skin={family.skin}
+          hair={family.youngerKid.hair}
+          shoes={family.youngerKid.shoes}
+          cap={family.youngerKid.cap}
+          pose={leoPose}
+          expression={kidExpression}
+          seed={family.id * 17 + 29}
+        />
       </group>
     </group>
   );
@@ -1498,20 +1571,31 @@ function FamilyGroup({
   return (
     <group ref={rig} position={start}>
       <group position={QUEUE_SPREAD.parent}>
-        <Body coat={family.coat} skin={family.skin} hair={family.hair} bag={family.bag} pose={parentPose} seed={family.id} />
+        <Body coat={family.coat} skin={family.skin} hair={family.hair} bag={family.bag} pose={parentPose} seed={family.id * 17 + 1} />
       </group>
       {family.kids.map((kid, index) => (
         <group key={`${family.id}-${index}`} position={QUEUE_SPREAD.kids[index]} scale={kid.scale}>
-          <KidBody shirt={kid.shirt} skin={kid.skin} hair={kid.hair} shoes={kid.shoes} pose={kidPose} expression={phase === "revealed" ? "cheer" : "calm"} seed={family.id + index} />
+          <KidBody
+            shirt={kid.shirt}
+            skin={kid.skin}
+            hair={kid.hair}
+            shoes={kid.shoes}
+            cap={kid.cap}
+            pose={kidPose}
+            expression={phase === "revealed" ? "cheer" : "calm"}
+            seed={family.id * 17 + (index === 0 ? 11 : 29)}
+          />
         </group>
       ))}
     </group>
   );
 }
 
+const MACHINE_EXIT_START: [number, number, number] = [0.32, 0, 1.34];
+
 function Leaver({ family, onDone }: { family: Family; onDone: (id: number) => void }) {
   const rig = useRef<Group>(null);
-  const here = useRef(new THREE.Vector3(...QUEUE_ANCHORS[0]));
+  const here = useRef(new THREE.Vector3(...MACHINE_EXIT_START));
   const goal = useRef(new THREE.Vector3(...EXIT));
   const finished = useRef(false);
   const speedRef = useRef(1.1);
@@ -1541,13 +1625,22 @@ function Leaver({ family, onDone }: { family: Family; onDone: (id: number) => vo
   const pose: PoseInput = { walkSpeedRef: speedRef, stridePhaseRef, lookPitchRef };
 
   return (
-    <group ref={rig} position={QUEUE_ANCHORS[0]}>
+    <group ref={rig} position={MACHINE_EXIT_START}>
       <group position={QUEUE_SPREAD.parent}>
-        <Body coat={family.coat} skin={family.skin} hair={family.hair} bag={family.bag} pose={pose} seed={family.id} />
+        <Body coat={family.coat} skin={family.skin} hair={family.hair} bag={family.bag} pose={pose} expression="cheer" seed={family.id * 17 + 1} />
       </group>
       {family.kids.map((kid, index) => (
         <group key={`${family.id}-leave-${index}`} position={QUEUE_SPREAD.kids[index]} scale={kid.scale}>
-          <KidBody shirt={kid.shirt} skin={kid.skin} hair={kid.hair} shoes={kid.shoes} pose={pose} expression="cheer" seed={family.id + index} />
+          <KidBody
+            shirt={kid.shirt}
+            skin={kid.skin}
+            hair={kid.hair}
+            shoes={kid.shoes}
+            cap={kid.cap}
+            pose={pose}
+            expression="cheer"
+            seed={family.id * 17 + (index === 0 ? 11 : 29)}
+          />
         </group>
       ))}
     </group>
@@ -1623,20 +1716,24 @@ export function Crowd({
   rarity?: Rarity | null;
   manualInputRef?: MutableRefObject<WalkKeys>;
 }) {
-  const [line, setLine] = useState<Family[]>(openingQueue);
+  const [activeFamily, setActiveFamily] = useState<Family>(() => makeFamilyForTurn(advance, 0));
+  const [line, setLine] = useState<Family[]>(() => openingQueue(advance));
   const [leaving, setLeaving] = useState<Family | null>(null);
+  const activeFamilyRef = useRef(activeFamily);
   const lineRef = useRef(line);
   const seen = useRef(advance);
 
   useEffect(() => {
     if (advance === seen.current) return;
     seen.current = advance;
-    const front = lineRef.current[0];
-    if (!front) return;
-    const next = [...lineRef.current.slice(1), makeFamily(advance)];
-    lineRef.current = next;
-    setLine(next);
-    setLeaving(front);
+    const departing = activeFamilyRef.current;
+    const nextActive = lineRef.current[0] ?? makeFamilyForTurn(advance, advance);
+    const nextQueue = [...lineRef.current.slice(1), makeFamilyForTurn(advance + 3, advance)];
+    activeFamilyRef.current = nextActive;
+    lineRef.current = nextQueue;
+    setActiveFamily(nextActive);
+    setLine(nextQueue);
+    setLeaving(departing);
   }, [advance]);
 
   if (phase === "reality") return null;
@@ -1656,6 +1753,9 @@ export function Crowd({
       <Rope from={POSTS[0]} to={POSTS[1]} />
       <Rope from={POSTS[1]} to={POSTS[2]} />
       <PlayerFamily
+        key={activeFamily.id}
+        family={activeFamily}
+        fromQueue={activeFamily.id > 0}
         phase={phase}
         playStep={playStep}
         coinPlayer={coinPlayer}
@@ -1684,7 +1784,13 @@ export function Crowd({
           phase={phase}
         />
       ))}
-      {leaving ? <Leaver family={leaving} onDone={() => setLeaving(null)} /> : null}
+      {leaving ? (
+        <Leaver
+          key={leaving.id}
+          family={leaving}
+          onDone={(id) => setLeaving((cur) => (cur?.id === id ? null : cur))}
+        />
+      ) : null}
       {WATCHERS.map((figure, index) => (
         <Person key={figure.position.join(",")} figure={figure} index={index} phase={phase} />
       ))}
